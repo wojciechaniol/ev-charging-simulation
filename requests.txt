@@ -1,0 +1,7 @@
+# Example charging point IDs for driver requests
+# One CP ID per line
+# Lines starting with # are ignored
+
+CP-001
+CP-002
+CP-001

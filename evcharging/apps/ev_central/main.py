@@ -1,0 +1,379 @@
+"""
+EV Central - Main controller service.
+
+Responsibilities:
+- Accept and route driver charging requests
+- Manage charging point availability
+- Coordinate commands to CP_E
+- Provide dashboard for monitoring
+"""
+
+import asyncio
+import argparse
+import sys
+from typing import Dict
+from datetime import datetime
+from loguru import logger
+
+from evcharging.common.config import CentralConfig, TOPICS
+from evcharging.common.kafka import KafkaProducerHelper, KafkaConsumerHelper, ensure_topics
+from evcharging.common.messages import (
+    DriverRequest, DriverUpdate, CentralCommand, CPStatus, CPTelemetry,
+    MessageStatus, CommandType, CPRegistration
+)
+from evcharging.common.states import CPState, can_supply
+from evcharging.common.utils import generate_id, utc_now
+
+from evcharging.apps.ev_central.dashboard import create_dashboard_app
+from evcharging.apps.ev_central.tcp_server import TCPControlServer
+
+
+class ChargingPoint:
+    """Internal representation of a charging point."""
+    
+    def __init__(self, cp_id: str, cp_e_host: str = "", cp_e_port: int = 0):
+        self.cp_id = cp_id
+        self.state = CPState.DISCONNECTED
+        self.current_driver: str | None = None
+        self.current_session: str | None = None
+        self.last_telemetry: CPTelemetry | None = None
+        self.last_update: datetime = utc_now()
+        self.cp_e_host = cp_e_host
+        self.cp_e_port = cp_e_port
+    
+    def is_available(self) -> bool:
+        """Check if CP is available for new charging session."""
+        return can_supply(self.state) and self.current_driver is None
+
+
+class EVCentralController:
+    """Main controller managing all charging points and driver requests."""
+    
+    def __init__(self, config: CentralConfig):
+        self.config = config
+        self.producer: KafkaProducerHelper | None = None
+        self.consumer: KafkaConsumerHelper | None = None
+        self.charging_points: Dict[str, ChargingPoint] = {}
+        self.active_requests: Dict[str, DriverRequest] = {}
+        self._running = False
+    
+    async def start(self):
+        """Initialize and start the central controller."""
+        logger.info("Starting EV Central Controller...")
+        
+        # Ensure Kafka topics exist
+        await ensure_topics(
+            self.config.kafka_bootstrap,
+            list(TOPICS.values())
+        )
+        
+        # Initialize Kafka producer
+        self.producer = KafkaProducerHelper(self.config.kafka_bootstrap)
+        await self.producer.start()
+        
+        # Initialize Kafka consumer for driver requests and CP status
+        self.consumer = KafkaConsumerHelper(
+            self.config.kafka_bootstrap,
+            topics=[TOPICS["DRIVER_REQUESTS"], TOPICS["CP_STATUS"], TOPICS["CP_TELEMETRY"]],
+            group_id="central-controller",
+            auto_offset_reset="latest"
+        )
+        await self.consumer.start()
+        
+        self._running = True
+        logger.info("EV Central Controller started successfully")
+    
+    async def stop(self):
+        """Stop the controller gracefully."""
+        logger.info("Stopping EV Central Controller...")
+        self._running = False
+        
+        if self.consumer:
+            await self.consumer.stop()
+        if self.producer:
+            await self.producer.stop()
+        
+        logger.info("EV Central Controller stopped")
+    
+    def register_cp(self, registration: CPRegistration) -> bool:
+        """Register a charging point from CP Monitor."""
+        cp_id = registration.cp_id
+        
+        if cp_id not in self.charging_points:
+            self.charging_points[cp_id] = ChargingPoint(
+                cp_id,
+                registration.cp_e_host,
+                registration.cp_e_port
+            )
+            logger.info(f"Registered new CP: {cp_id}")
+        else:
+            cp = self.charging_points[cp_id]
+            cp.cp_e_host = registration.cp_e_host
+            cp.cp_e_port = registration.cp_e_port
+            logger.info(f"Updated CP registration: {cp_id}")
+        
+        # Set to ACTIVATED state
+        self.charging_points[cp_id].state = CPState.ACTIVATED
+        self.charging_points[cp_id].last_update = utc_now()
+        
+        return True
+    
+    async def handle_driver_request(self, request: DriverRequest):
+        """Process a driver charging request."""
+        logger.info(
+            f"Driver request received: driver={request.driver_id}, "
+            f"cp={request.cp_id}, request_id={request.request_id}"
+        )
+        
+        # Check if CP exists and is available
+        if request.cp_id not in self.charging_points:
+            await self._send_driver_update(
+                request,
+                MessageStatus.DENIED,
+                "Charging point not found"
+            )
+            return
+        
+        cp = self.charging_points[request.cp_id]
+        
+        if not cp.is_available():
+            await self._send_driver_update(
+                request,
+                MessageStatus.DENIED,
+                f"Charging point not available (state: {cp.state})"
+            )
+            return
+        
+        # Accept the request
+        self.active_requests[request.request_id] = request
+        cp.current_driver = request.driver_id
+        cp.current_session = generate_id("session")
+        
+        await self._send_driver_update(
+            request,
+            MessageStatus.ACCEPTED,
+            "Request accepted, starting charging"
+        )
+        
+        # Send START_SUPPLY command to CP_E
+        command = CentralCommand(
+            cmd=CommandType.START_SUPPLY,
+            cp_id=request.cp_id,
+            payload={
+                "driver_id": request.driver_id,
+                "request_id": request.request_id,
+                "session_id": cp.current_session
+            }
+        )
+        await self.producer.send(TOPICS["CENTRAL_COMMANDS"], command, key=request.cp_id)
+        logger.info(f"Sent START_SUPPLY command for CP {request.cp_id}")
+    
+    async def handle_cp_status(self, status: CPStatus):
+        """Process CP status updates."""
+        cp_id = status.cp_id
+        
+        if cp_id not in self.charging_points:
+            logger.warning(f"Received status for unknown CP: {cp_id}")
+            return
+        
+        cp = self.charging_points[cp_id]
+        old_state = cp.state
+        cp.state = CPState(status.state)
+        cp.last_update = utc_now()
+        
+        logger.info(f"CP {cp_id} state: {old_state} -> {cp.state} ({status.reason or 'no reason'})")
+        
+        # If transition to FAULT or STOPPED, notify affected driver
+        if cp.state in {CPState.FAULT, CPState.STOPPED} and cp.current_driver:
+            # Find active request for this CP
+            for req_id, req in self.active_requests.items():
+                if req.cp_id == cp_id:
+                    await self._send_driver_update(
+                        req,
+                        MessageStatus.FAILED,
+                        f"Charging interrupted: {status.reason or cp.state}"
+                    )
+                    del self.active_requests[req_id]
+                    break
+            
+            cp.current_driver = None
+            cp.current_session = None
+        
+        # If transition back to ACTIVATED from SUPPLYING, charging completed
+        if old_state == CPState.SUPPLYING and cp.state == CPState.ACTIVATED:
+            if cp.current_driver:
+                for req_id, req in list(self.active_requests.items()):
+                    if req.cp_id == cp_id:
+                        await self._send_driver_update(
+                            req,
+                            MessageStatus.COMPLETED,
+                            "Charging completed successfully"
+                        )
+                        del self.active_requests[req_id]
+                        break
+                
+                cp.current_driver = None
+                cp.current_session = None
+    
+    async def handle_cp_telemetry(self, telemetry: CPTelemetry):
+        """Process CP telemetry updates."""
+        cp_id = telemetry.cp_id
+        
+        if cp_id in self.charging_points:
+            self.charging_points[cp_id].last_telemetry = telemetry
+            logger.debug(
+                f"Telemetry from {cp_id}: {telemetry.kw:.2f} kW, "
+                f"€{telemetry.euros:.2f}, driver={telemetry.driver_id}"
+            )
+            
+            # Send progress update to driver
+            if telemetry.driver_id:
+                for req_id, req in self.active_requests.items():
+                    if req.cp_id == cp_id and req.driver_id == telemetry.driver_id:
+                        await self._send_driver_update(
+                            req,
+                            MessageStatus.IN_PROGRESS,
+                            f"Charging: {telemetry.kw:.1f} kW, €{telemetry.euros:.2f}"
+                        )
+                        break
+    
+    async def _send_driver_update(
+        self,
+        request: DriverRequest,
+        status: MessageStatus,
+        reason: str
+    ):
+        """Send status update to driver."""
+        update = DriverUpdate(
+            request_id=request.request_id,
+            driver_id=request.driver_id,
+            cp_id=request.cp_id,
+            status=status,
+            reason=reason
+        )
+        await self.producer.send(TOPICS["DRIVER_UPDATES"], update, key=request.driver_id)
+    
+    async def process_messages(self):
+        """Main message processing loop."""
+        async for msg in self.consumer.consume():
+            try:
+                topic = msg["topic"]
+                value = msg["value"]
+                
+                if topic == TOPICS["DRIVER_REQUESTS"]:
+                    request = DriverRequest(**value)
+                    await self.handle_driver_request(request)
+                
+                elif topic == TOPICS["CP_STATUS"]:
+                    status = CPStatus(**value)
+                    await self.handle_cp_status(status)
+                
+                elif topic == TOPICS["CP_TELEMETRY"]:
+                    telemetry = CPTelemetry(**value)
+                    await self.handle_cp_telemetry(telemetry)
+            
+            except Exception as e:
+                logger.error(f"Error processing message from {msg.get('topic')}: {e}")
+    
+    def get_dashboard_data(self) -> dict:
+        """Get current state for dashboard display."""
+        return {
+            "charging_points": [
+                {
+                    "cp_id": cp.cp_id,
+                    "state": cp.state.value,
+                    "current_driver": cp.current_driver,
+                    "last_update": cp.last_update.isoformat(),
+                    "telemetry": (
+                        {
+                            "kw": cp.last_telemetry.kw,
+                            "euros": cp.last_telemetry.euros,
+                            "session_id": cp.last_telemetry.session_id,
+                        }
+                        if cp.last_telemetry
+                        else None
+                    ),
+                }
+                for cp in self.charging_points.values()
+            ],
+            "active_requests": len(self.active_requests),
+        }
+
+
+# Global controller instance for dashboard access
+_controller: EVCentralController | None = None
+
+
+def get_controller() -> EVCentralController:
+    """Get the global controller instance."""
+    if _controller is None:
+        raise RuntimeError("Controller not initialized")
+    return _controller
+
+
+async def main():
+    """Main entry point for EV Central service."""
+    parser = argparse.ArgumentParser(description="EV Central Controller")
+    parser.add_argument("--listen-port", type=int, help="TCP control plane port")
+    parser.add_argument("--http-port", type=int, help="HTTP dashboard port")
+    parser.add_argument("--kafka-bootstrap", type=str, help="Kafka bootstrap servers")
+    parser.add_argument("--db-url", type=str, help="Database URL (optional)")
+    parser.add_argument("--log-level", type=str, default="INFO", help="Log level")
+    
+    args = parser.parse_args()
+    
+    # Configure logging
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>Central</cyan> | <level>{message}</level>",
+        level=args.log_level
+    )
+    
+    # Build config from args
+    config_dict = {k: v for k, v in vars(args).items() if v is not None}
+    config = CentralConfig(**config_dict)
+    
+    # Initialize controller
+    global _controller
+    _controller = EVCentralController(config)
+    
+    try:
+        await _controller.start()
+        
+        # Start TCP control server
+        tcp_server = TCPControlServer(config.listen_port)
+        tcp_task = asyncio.create_task(tcp_server.start())
+        
+        # Start dashboard (in separate thread via uvicorn)
+        from uvicorn import Config, Server
+        dashboard_app = create_dashboard_app(_controller)
+        uvicorn_config = Config(
+            dashboard_app,
+            host="0.0.0.0",
+            port=config.http_port,
+            log_level=config.log_level.lower()
+        )
+        server = Server(uvicorn_config)
+        server_task = asyncio.create_task(server.serve())
+        
+        # Start message processing
+        processing_task = asyncio.create_task(_controller.process_messages())
+        
+        logger.info(f"Dashboard available at http://localhost:{config.http_port}")
+        logger.info(f"TCP control server listening on port {config.listen_port}")
+        
+        # Wait for all tasks
+        await asyncio.gather(tcp_task, server_task, processing_task)
+    
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
+        raise
+    finally:
+        await _controller.stop()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
