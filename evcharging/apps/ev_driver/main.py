@@ -195,26 +195,29 @@ class EVDriver:
 async def main():
     """Main entry point for Driver client."""
     parser = argparse.ArgumentParser(description="EV Driver Client")
-    parser.add_argument("--driver-id", type=str, required=True, help="Driver identifier")
+    parser.add_argument("--driver-id", type=str, help="Driver identifier")
     parser.add_argument("--kafka-bootstrap", type=str, help="Kafka bootstrap servers")
     parser.add_argument("--requests-file", type=str, help="File with CP IDs to request")
     parser.add_argument("--request-interval", type=float, help="Interval between requests (seconds)")
-    parser.add_argument("--log-level", type=str, default="INFO", help="Log level")
+    parser.add_argument("--log-level", type=str, help="Log level")
     
     args = parser.parse_args()
+    
+    # Build config from args (only non-None values), env vars will fill the rest
+    config_dict = {k: v for k, v in vars(args).items() if v is not None and k != 'log_level'}
+    config = DriverConfig(**config_dict)
+    
+    # Use log level from args or config
+    log_level = args.log_level if args.log_level else config.log_level
     
     # Configure logging
     logger.remove()
     logger.add(
         sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <magenta>Driver:{driver_id}</magenta> | <level>{message}</level>",
-        level=args.log_level
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <magenta>Driver:{extra[driver_id]}</magenta> | <level>{message}</level>",
+        level=log_level
     )
-    logger = logger.bind(driver_id=args.driver_id)
-    
-    # Build config from args
-    config_dict = {k: v for k, v in vars(args).items() if v is not None}
-    config = DriverConfig(**config_dict)
+    logger.configure(extra={"driver_id": config.driver_id})
     
     # Initialize driver
     driver = EVDriver(config)

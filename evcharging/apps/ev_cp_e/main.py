@@ -316,24 +316,27 @@ async def main():
     """Main entry point for CP Engine service."""
     parser = argparse.ArgumentParser(description="EV CP Engine")
     parser.add_argument("--kafka-bootstrap", type=str, help="Kafka bootstrap servers")
-    parser.add_argument("--cp-id", type=str, required=True, help="Charging Point ID")
+    parser.add_argument("--cp-id", type=str, help="Charging Point ID")
     parser.add_argument("--health-port", type=int, help="TCP health check port")
-    parser.add_argument("--log-level", type=str, default="INFO", help="Log level")
+    parser.add_argument("--log-level", type=str, help="Log level")
     
     args = parser.parse_args()
     
-    # Configure logging
+    # Build config from args (only non-None values), env vars will fill the rest
+    config_dict = {k: v for k, v in vars(args).items() if v is not None and k != 'log_level'}
+    config = CPEngineConfig(**config_dict)
+    
+    # Use log level from args or config
+    log_level = args.log_level if args.log_level else config.log_level
+    
+    # Configure logging  
     logger.remove()
     logger.add(
         sys.stderr,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>CP_E:{cp_id}</cyan> | <level>{message}</level>",
-        level=args.log_level
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>CP_E:{extra[cp_id]}</cyan> | <level>{message}</level>",
+        level=log_level
     )
-    logger = logger.bind(cp_id=args.cp_id)
-    
-    # Build config from args
-    config_dict = {k: v for k, v in vars(args).items() if v is not None}
-    config = CPEngineConfig(**config_dict)
+    logger.configure(extra={"cp_id": config.cp_id})
     
     # Initialize engine
     engine = CPEngine(config)
