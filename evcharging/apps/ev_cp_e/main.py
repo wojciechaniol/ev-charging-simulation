@@ -154,6 +154,8 @@ class CPEngine:
                 await self.change_state(CPEvent.RESUME_CP, "Central resumed CP")
             
             elif command.cmd == CommandType.SHUTDOWN:
+                logger.info(f"CP {self.cp_id}: Received SHUTDOWN command")
+                self._running = False
                 await self.stop()
         
         except StateTransitionError as e:
@@ -161,6 +163,11 @@ class CPEngine:
     
     async def start_supply(self, payload: dict):
         """Start charging session."""
+        # Validate payload
+        if not payload or not isinstance(payload, dict):
+            logger.error(f"CP {self.cp_id}: Invalid payload for START_SUPPLY command")
+            return
+        
         driver_id = payload.get("driver_id")
         request_id = payload.get("request_id")
         session_id = payload.get("session_id")
@@ -299,17 +306,30 @@ class CPEngine:
     
     async def process_messages(self):
         """Main message processing loop."""
-        async for msg in self.consumer.consume():
-            try:
-                topic = msg["topic"]
-                value = msg["value"]
+        try:
+            async for msg in self.consumer.consume():
+                # Check if we should stop processing
+                if not self._running:
+                    logger.info(f"CP {self.cp_id}: Stopping message processing")
+                    break
                 
-                if topic == TOPICS["CENTRAL_COMMANDS"]:
-                    command = CentralCommand(**value)
-                    await self.handle_command(command)
-            
-            except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                try:
+                    topic = msg["topic"]
+                    value = msg["value"]
+                    
+                    if topic == TOPICS["CENTRAL_COMMANDS"]:
+                        command = CentralCommand(**value)
+                        await self.handle_command(command)
+                        
+                        # Break loop if shutdown was commanded
+                        if not self._running:
+                            break
+                
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+        except Exception as e:
+            if self._running:  # Only log if not intentionally stopped
+                logger.error(f"Error in message processing loop: {e}")
 
 
 async def main():

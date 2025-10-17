@@ -35,6 +35,26 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
             "message": "Charging point registered successfully" if success else "Registration failed"
         }
     
+    @app.post("/cp/fault")
+    async def notify_fault(fault_data: dict):
+        """Receive fault/health notifications from CP monitors."""
+        cp_id = fault_data.get("cp_id")
+        status = fault_data.get("status")
+        reason = fault_data.get("reason", "")
+        
+        logger.info(f"Received fault notification for {cp_id}: {status} - {reason}")
+        
+        # Update CP state if it exists
+        if cp_id in controller.charging_points:
+            if status == "FAULT":
+                logger.warning(f"CP {cp_id} marked as faulty by monitor: {reason}")
+                controller.mark_cp_faulty(cp_id, reason)
+            elif status == "HEALTHY":
+                logger.info(f"CP {cp_id} health restored: {reason}")
+                controller.clear_cp_fault(cp_id)
+        
+        return {"success": True, "cp_id": cp_id, "status": status}
+    
     @app.get("/cp")
     async def list_charging_points():
         """List all charging points and their current state."""

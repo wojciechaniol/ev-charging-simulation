@@ -18,11 +18,13 @@ from loguru import logger
 from evcharging.common.config import CentralConfig, TOPICS
 from evcharging.common.kafka import KafkaProducerHelper, KafkaConsumerHelper, ensure_topics
 from evcharging.common.messages import (
-    DriverRequest, DriverUpdate, CentralCommand, CPStatus, CPTelemetry,
-    MessageStatus, CommandType, CPRegistration
+    DriverRequest, DriverUpdate, MessageStatus, CentralCommand, CommandType,
+    CPStatus, CPTelemetry, CPRegistration
 )
 from evcharging.common.states import CPState, can_supply
-from evcharging.common.utils import generate_id, utc_now
+from evcharging.common.utils import utc_now, generate_id
+from evcharging.common.circuit_breaker import CircuitBreaker, CircuitState
+from evcharging.common.database import FaultHistoryDB
 
 from evcharging.apps.ev_central.dashboard import create_dashboard_app
 from evcharging.apps.ev_central.tcp_server import TCPControlServer
@@ -40,10 +42,22 @@ class ChargingPoint:
         self.last_update: datetime = utc_now()
         self.cp_e_host = cp_e_host
         self.cp_e_port = cp_e_port
+        self.is_faulty = False  # Track fault state from monitor
+        self.fault_reason: str | None = None
+        self.fault_timestamp: datetime | None = None
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=30,
+            half_open_max_calls=2
+        )
     
     def is_available(self) -> bool:
         """Check if CP is available for new charging session."""
-        return can_supply(self.state) and self.current_driver is None
+        # Check circuit breaker state
+        if self.circuit_breaker.get_state() == CircuitState.OPEN:
+            return False
+        
+        return can_supply(self.state) and self.current_driver is None and not self.is_faulty
 
 
 class EVCentralController:
@@ -56,6 +70,7 @@ class EVCentralController:
         self.charging_points: Dict[str, ChargingPoint] = {}
         self.active_requests: Dict[str, DriverRequest] = {}
         self._running = False
+        self.db = FaultHistoryDB()  # Initialize database
     
     async def start(self):
         """Initialize and start the central controller."""
@@ -118,6 +133,49 @@ class EVCentralController:
         
         return True
     
+    def mark_cp_faulty(self, cp_id: str, reason: str):
+        """Mark a charging point as faulty."""
+        if cp_id in self.charging_points:
+            cp = self.charging_points[cp_id]
+            cp.is_faulty = True
+            cp.fault_reason = reason
+            cp.fault_timestamp = utc_now()
+            cp.circuit_breaker.call_failed()  # Record failure in circuit breaker
+            
+            # Record fault event in database
+            self.db.record_fault_event(cp_id, "FAULT", reason)
+            
+            logger.warning(
+                f"CP {cp_id} marked as FAULTY: {reason} "
+                f"(Circuit: {cp.circuit_breaker.get_state().value})"
+            )
+            
+            # If CP has an active session, notify the driver
+            if cp.current_driver:
+                logger.warning(f"CP {cp_id} has active session with {cp.current_driver}, notifying driver")
+                # Driver will be notified through normal status updates
+        else:
+            logger.error(f"Cannot mark unknown CP {cp_id} as faulty")
+    
+    def clear_cp_fault(self, cp_id: str):
+        """Clear fault status from a charging point."""
+        if cp_id in self.charging_points:
+            cp = self.charging_points[cp_id]
+            cp.is_faulty = False
+            cp.fault_reason = None
+            cp.fault_timestamp = None
+            cp.circuit_breaker.call_succeeded()  # Record success in circuit breaker
+            
+            # Record recovery event in database
+            self.db.record_fault_event(cp_id, "RECOVERY", "Health check restored")
+            
+            logger.info(
+                f"CP {cp_id} fault cleared, now available "
+                f"(Circuit: {cp.circuit_breaker.get_state().value})"
+            )
+        else:
+            logger.error(f"Cannot clear fault for unknown CP {cp_id}")
+    
     async def handle_driver_request(self, request: DriverRequest):
         """Process a driver charging request."""
         logger.info(
@@ -149,6 +207,13 @@ class EVCentralController:
         cp.current_driver = request.driver_id
         cp.current_session = generate_id("session")
         
+        # Start charging session in database
+        self.db.start_charging_session(
+            session_id=cp.current_session,
+            cp_id=request.cp_id,
+            driver_id=request.driver_id
+        )
+        
         await self._send_driver_update(
             request,
             MessageStatus.ACCEPTED,
@@ -173,54 +238,84 @@ class EVCentralController:
         cp_id = status.cp_id
         
         if cp_id not in self.charging_points:
-            logger.warning(f"Received status for unknown CP: {cp_id}")
+            logger.warning(f"Status from unknown CP: {cp_id}")
             return
         
         cp = self.charging_points[cp_id]
         old_state = cp.state
-        cp.state = CPState(status.state)
-        cp.last_update = utc_now()
+        cp.state = status.state
+        cp.last_seen = utc_now()
         
-        logger.info(f"CP {cp_id} state: {old_state} -> {cp.state} ({status.reason or 'no reason'})")
+        # Record health snapshot to database
+        self.db.record_health_snapshot(
+            cp_id=cp_id,
+            state=status.state.value,
+            is_faulty=cp.is_faulty,
+            fault_reason=cp.fault_reason,
+            circuit_breaker_state=cp.circuit_breaker.get_state().value
+        )
         
-        # If transition to FAULT or STOPPED, notify affected driver
-        if cp.state in {CPState.FAULT, CPState.STOPPED} and cp.current_driver:
-            # Find active request for this CP
-            for req_id, req in self.active_requests.items():
-                if req.cp_id == cp_id:
-                    await self._send_driver_update(
-                        req,
-                        MessageStatus.FAILED,
-                        f"Charging interrupted: {status.reason or cp.state}"
+        logger.debug(
+            f"Status from {cp_id}: {status.state.value} (was {old_state.value})"
+        )
+        
+        # Handle state transitions
+        await self._handle_state_transition(cp_id, old_state, cp)
+    
+    async def _handle_state_transition(self, cp_id: str, old_state: CPState, cp: ChargingPoint):
+        """Handle state transitions for charging points."""
+        # Session ended - transition from SUPPLYING to any other state
+        if old_state == CPState.SUPPLYING and cp.state != CPState.SUPPLYING:
+            if cp.current_session:
+                # End the session in database
+                if cp.last_telemetry:
+                    self.db.end_charging_session(
+                        session_id=cp.current_session,
+                        total_kwh=cp.last_telemetry.kwh,
+                        total_cost=cp.last_telemetry.euros,
+                        status="COMPLETED" if cp.state == CPState.ACTIVATED else "FAILED"
                     )
-                    del self.active_requests[req_id]
-                    break
-            
-            cp.current_driver = None
-            cp.current_session = None
-        
-        # If transition back to ACTIVATED from SUPPLYING, charging completed
-        if old_state == CPState.SUPPLYING and cp.state == CPState.ACTIVATED:
-            if cp.current_driver:
-                for req_id, req in list(self.active_requests.items()):
-                    if req.cp_id == cp_id:
-                        await self._send_driver_update(
-                            req,
-                            MessageStatus.COMPLETED,
-                            "Charging completed successfully"
-                        )
-                        del self.active_requests[req_id]
-                        break
                 
+                # Notify driver
+                if cp.current_driver:
+                    for req_id, req in list(self.active_requests.items()):
+                        if req.cp_id == cp_id and req.driver_id == cp.current_driver:
+                            if cp.state == CPState.ACTIVATED:
+                                await self._send_driver_update(
+                                    req,
+                                    MessageStatus.COMPLETED,
+                                    "Charging completed successfully"
+                                )
+                            else:
+                                await self._send_driver_update(
+                                    req,
+                                    MessageStatus.FAILED,
+                                    f"Charging interrupted: {cp.state.value}"
+                                )
+                            del self.active_requests[req_id]
+                            break
+                
+                # Clear session
                 cp.current_driver = None
                 cp.current_session = None
+                logger.info(f"Session ended on {cp_id}, state: {cp.state.value}")
     
     async def handle_cp_telemetry(self, telemetry: CPTelemetry):
         """Process CP telemetry updates."""
         cp_id = telemetry.cp_id
         
         if cp_id in self.charging_points:
-            self.charging_points[cp_id].last_telemetry = telemetry
+            cp = self.charging_points[cp_id]
+            cp.last_telemetry = telemetry
+            
+            # Update session energy in database if session is active
+            if cp.current_session and telemetry.session_id == cp.current_session:
+                self.db.update_session_energy(
+                    session_id=cp.current_session,
+                    kwh=telemetry.kwh,
+                    cost=telemetry.euros
+                )
+            
             logger.debug(
                 f"Telemetry from {cp_id}: {telemetry.kw:.2f} kW, "
                 f"€{telemetry.euros:.2f}, driver={telemetry.driver_id}"
@@ -372,6 +467,21 @@ async def main():
         logger.error(f"Fatal error: {e}")
         raise
     finally:
+        # Cleanup tasks and servers
+        if 'tcp_server' in locals():
+            await tcp_server.stop()
+        if 'tcp_task' in locals() and not tcp_task.done():
+            tcp_task.cancel()
+            try:
+                await tcp_task
+            except asyncio.CancelledError:
+                pass
+        if 'server_task' in locals() and not server_task.done():
+            server_task.cancel()
+            try:
+                await server_task
+            except asyncio.CancelledError:
+                pass
         await _controller.stop()
 
 

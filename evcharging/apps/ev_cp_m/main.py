@@ -19,6 +19,7 @@ from loguru import logger
 from evcharging.common.config import CPMonitorConfig
 from evcharging.common.messages import CPRegistration
 from evcharging.common.utils import utc_now
+from evcharging.common.utils import utc_now
 
 
 class CPMonitor:
@@ -71,6 +72,58 @@ class CPMonitor:
         
         except Exception as e:
             logger.error(f"Error registering with Central: {e}")
+    
+    async def notify_central_fault(self):
+        """Notify Central that this CP has a fault."""
+        try:
+            central_url = f"http://{self.config.central_host}:{self.config.central_port}"
+            fault_data = {
+                "cp_id": self.cp_id,
+                "status": "FAULT",
+                "reason": "Health check failures exceeded threshold",
+                "ts": utc_now().isoformat()
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{central_url}/cp/fault",
+                    json=fault_data,
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"CP {self.cp_id}: Fault notification sent to Central")
+                else:
+                    logger.error(f"Failed to notify Central of fault: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"Error notifying Central of fault: {e}")
+    
+    async def notify_central_healthy(self):
+        """Notify Central that this CP health is restored."""
+        try:
+            central_url = f"http://{self.config.central_host}:{self.config.central_port}"
+            health_data = {
+                "cp_id": self.cp_id,
+                "status": "HEALTHY",
+                "reason": "Health check restored",
+                "ts": utc_now().isoformat()
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{central_url}/cp/fault",
+                    json=health_data,
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"CP {self.cp_id}: Health restoration notification sent to Central")
+                else:
+                    logger.error(f"Failed to notify Central of health restoration: {response.status_code}")
+        
+        except Exception as e:
+            logger.error(f"Error notifying Central of health restoration: {e}")
     
     async def health_check_loop(self):
         """Periodically check CP Engine health via TCP."""
@@ -125,7 +178,13 @@ class CPMonitor:
                 if consecutive_failures >= 3 and self.is_healthy:
                     logger.error(f"CP {self.cp_id}: FAULT DETECTED - marking as unhealthy")
                     self.is_healthy = False
-                    # TODO: Send fault notification to Central via Kafka or HTTP
+                    await self.notify_central_fault()
+                
+                # Notify when health is restored after being unhealthy
+                elif consecutive_failures == 0 and not self.is_healthy:
+                    logger.info(f"CP {self.cp_id}: Health restored - notifying Central")
+                    self.is_healthy = True
+                    await self.notify_central_healthy()
             
             except Exception as e:
                 logger.error(f"Error in health check loop: {e}")

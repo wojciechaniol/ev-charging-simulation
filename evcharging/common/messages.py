@@ -6,7 +6,9 @@ Provides JSON-schema export and validation for inter-service communication.
 from datetime import datetime
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
+from evcharging.common.utils import utc_now
 
 
 class MessageStatus(str, Enum):
@@ -32,10 +34,10 @@ class DriverRequest(BaseModel):
     request_id: str = Field(..., description="Unique request identifier")
     driver_id: str = Field(..., description="Driver identifier")
     cp_id: str = Field(..., description="Charging point identifier")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "request_id": "req-001",
                 "driver_id": "driver-123",
@@ -43,6 +45,7 @@ class DriverRequest(BaseModel):
                 "ts": "2025-10-13T12:00:00Z"
             }
         }
+    )
 
 
 class DriverUpdate(BaseModel):
@@ -52,10 +55,10 @@ class DriverUpdate(BaseModel):
     cp_id: str = Field(..., description="Charging point identifier")
     status: MessageStatus = Field(..., description="Current status")
     reason: Optional[str] = Field(None, description="Additional information or error reason")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "request_id": "req-001",
                 "driver_id": "driver-123",
@@ -65,6 +68,7 @@ class DriverUpdate(BaseModel):
                 "ts": "2025-10-13T12:00:01Z"
             }
         }
+    )
 
 
 class CentralCommand(BaseModel):
@@ -72,10 +76,10 @@ class CentralCommand(BaseModel):
     cmd: CommandType = Field(..., description="Command type")
     cp_id: str = Field(..., description="Target charging point")
     payload: Optional[dict] = Field(None, description="Additional command data")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "cmd": "start_supply",
                 "cp_id": "CP-001",
@@ -83,6 +87,7 @@ class CentralCommand(BaseModel):
                 "ts": "2025-10-13T12:00:00Z"
             }
         }
+    )
 
 
 class CPStatus(BaseModel):
@@ -90,10 +95,10 @@ class CPStatus(BaseModel):
     cp_id: str = Field(..., description="Charging point identifier")
     state: str = Field(..., description="Current CP state")
     reason: Optional[str] = Field(None, description="State change reason")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "cp_id": "CP-001",
                 "state": "SUPPLYING",
@@ -101,6 +106,7 @@ class CPStatus(BaseModel):
                 "ts": "2025-10-13T12:00:01Z"
             }
         }
+    )
 
 
 class CPTelemetry(BaseModel):
@@ -110,10 +116,10 @@ class CPTelemetry(BaseModel):
     euros: float = Field(..., description="Cumulative cost in euros")
     driver_id: Optional[str] = Field(None, description="Current driver (non-personal demo ID)")
     session_id: Optional[str] = Field(None, description="Current charging session ID")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "cp_id": "CP-001",
                 "kw": 22.5,
@@ -123,6 +129,7 @@ class CPTelemetry(BaseModel):
                 "ts": "2025-10-13T12:00:05Z"
             }
         }
+    )
 
 
 class CPRegistration(BaseModel):
@@ -130,7 +137,7 @@ class CPRegistration(BaseModel):
     cp_id: str = Field(..., description="Charging point identifier")
     cp_e_host: str = Field(..., description="CP Engine host")
     cp_e_port: int = Field(..., description="CP Engine port")
-    ts: datetime = Field(default_factory=datetime.utcnow, description="Timestamp")
+    ts: datetime = Field(default_factory=utc_now, description="Timestamp")
 
 
 def get_json_schemas() -> dict:
