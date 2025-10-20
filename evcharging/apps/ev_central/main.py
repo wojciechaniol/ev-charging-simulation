@@ -133,29 +133,34 @@ class EVCentralController:
         
         return True
     
-    def mark_cp_faulty(self, cp_id: str, reason: str):
-        """Mark a charging point as faulty."""
-        if cp_id in self.charging_points:
-            cp = self.charging_points[cp_id]
-            cp.is_faulty = True
-            cp.fault_reason = reason
-            cp.fault_timestamp = utc_now()
-            cp.circuit_breaker.call_failed()  # Record failure in circuit breaker
-            
-            # Record fault event in database
-            self.db.record_fault_event(cp_id, "FAULT", reason)
-            
-            logger.warning(
-                f"CP {cp_id} marked as FAULTY: {reason} "
-                f"(Circuit: {cp.circuit_breaker.get_state().value})"
-            )
-            
-            # If CP has an active session, notify the driver
-            if cp.current_driver:
-                logger.warning(f"CP {cp_id} has active session with {cp.current_driver}, notifying driver")
-                # Driver will be notified through normal status updates
-        else:
+    async def mark_cp_faulty(self, cp_id: str, reason: str):
+        """Mark a charging point as faulty and trigger the engine reaction."""
+        if cp_id not in self.charging_points:
             logger.error(f"Cannot mark unknown CP {cp_id} as faulty")
+            return
+        
+        cp = self.charging_points[cp_id]
+        cp.is_faulty = True
+        cp.fault_reason = reason
+        cp.fault_timestamp = utc_now()
+        cp.circuit_breaker.call_failed()  # Record failure in circuit breaker
+        
+        # Record fault event in database
+        self.db.record_fault_event(cp_id, "FAULT", reason)
+        logger.warning(
+            f"CP {cp_id} marked as FAULTY: {reason} "
+            f"(Circuit: {cp.circuit_breaker.get_state().value})"
+        )
+        
+        if cp.cp_e_host:
+            await cp.cp_e_host.handle_fault(reason)
+        else:
+            logger.warning(f"CP {cp_id} has no attached engine — cannot send fault command")
+
+        # If CP has an active session, notify the driver
+        if cp.current_driver:
+            logger.warning(f"CP {cp_id} has active session with {cp.current_driver}, notifying driver")
+            # Driver will be notified through normal status updates
     
     def clear_cp_fault(self, cp_id: str):
         """Clear fault status from a charging point."""
@@ -243,7 +248,11 @@ class EVCentralController:
         
         cp = self.charging_points[cp_id]
         old_state = cp.state
-        cp.state = status.state
+        try:
+            cp.state = CPState(status.state)
+        except ValueError:
+            logger.error(f"Invalid CP state '{status.state}' from {cp_id}")
+            return
         cp.last_seen = utc_now()
         
         # Record health snapshot to database
