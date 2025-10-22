@@ -1,7 +1,16 @@
-# Example charging point IDs for driver requests
-# One CP ID per line
-# Lines starting with # are ignored
+# Charging point requests for autonomous testing
+# Multiple requests to demonstrate system functionality
+# Each driver will cycle through these CPs continuously
 
 CP-001
 CP-002
+CP-003
+CP-004
+CP-005
 CP-001
+CP-003
+CP-002
+CP-005
+CP-004
+CP-001
+CP-002
