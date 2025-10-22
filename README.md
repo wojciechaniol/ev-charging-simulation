@@ -428,6 +428,18 @@ This checks:
 - **[LAB_DEPLOYMENT_READY.md](LAB_DEPLOYMENT_READY.md)** - Lab deployment scenarios
 - **[DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)** - Architecture and patterns
 
+### 📚 Fault Tolerance Documentation
+
+- **[RECOVERY_SCALABILITY_GUIDE.md](RECOVERY_SCALABILITY_GUIDE.md)** - 🔄 Recovery and horizontal scaling guide
+- **[CP_STATUS_LOGIC.md](CP_STATUS_LOGIC.md)** - 🔌 Charging Point status determination (Monitor/Engine logic)
+- **[FAULT_TOLERANCE.md](FAULT_TOLERANCE.md)** - Complete fault tolerance implementation
+- **[FAULT_TOLERANCE_QUICKREF.md](FAULT_TOLERANCE_QUICKREF.md)** - Quick reference guide
+- **[AUTONOMOUS_OPERATION_VALIDATION.md](AUTONOMOUS_OPERATION_VALIDATION.md)** - Autonomous operation tests
+
+### 📚 Protocol Documentation
+
+- **[TCP_FRAMING_PROTOCOL.md](TCP_FRAMING_PROTOCOL.md)** - 📡 TCP message framing protocol (`<STX><DATA><ETX><LRC>`)
+
 **Key Features**:
 - ✅ No compilation environment required
 - ✅ Docker-based containerization

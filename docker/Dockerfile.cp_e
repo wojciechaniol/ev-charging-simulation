@@ -7,6 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -14,6 +15,10 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy wait-for-kafka script
+COPY wait-for-kafka.sh /usr/local/bin/wait-for-kafka.sh
+RUN chmod +x /usr/local/bin/wait-for-kafka.sh
 
 # Copy application code
 COPY evcharging /app/evcharging
@@ -24,5 +29,5 @@ ENV PYTHONPATH=/app
 # Expose health port
 EXPOSE 8001
 
-# Run CP Engine service
-CMD ["python", "-m", "evcharging.apps.ev_cp_e.main"]
+# Run CP Engine service with Kafka wait
+CMD ["wait-for-kafka.sh", "kafka:9092", "python", "-m", "evcharging.apps.ev_cp_e.main"]
