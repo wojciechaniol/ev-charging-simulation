@@ -358,6 +358,84 @@ The web dashboard at http://localhost:8000 displays:
 
 *The dashboard shows all charging points with their current states, active sessions, and real-time power/cost metrics.*
 
+## 🏢 Deployment Options
+
+The system supports **multiple deployment scenarios** without requiring compilation environments. All builds are containerized for consistent, reproducible deployments.
+
+### 📦 Deployment Scenarios
+
+#### 1. Full Local Deployment (Single Machine)
+
+Perfect for development and testing:
+
+```bash
+docker compose up -d
+```
+
+**What's included**: Kafka, Central, 2x CP Engines, 2x CP Monitors, Driver
+
+#### 2. Remote Kafka Deployment
+
+Use existing Kafka infrastructure:
+
+```bash
+export KAFKA_BOOTSTRAP=kafka.example.com:9092
+docker compose -f docker/docker-compose.remote-kafka.yml up -d
+```
+
+#### 3. Lab Machine Deployment (Distributed)
+
+Deploy components across multiple machines:
+
+**Machine A** (Kafka + Central):
+```bash
+docker compose up -d kafka ev-central
+```
+
+**Machine B** (Charging Points):
+```bash
+export KAFKA_BOOTSTRAP=<machine-a-ip>:9092
+docker compose up -d ev-cp-e-1 ev-cp-e-2 ev-cp-m-1 ev-cp-m-2
+```
+
+#### 4. Interactive Deployment
+
+Use the deployment script for guided setup:
+
+```bash
+./deploy.sh
+```
+
+### ✅ Verification
+
+After deployment, verify the system:
+
+```bash
+./verify.sh
+```
+
+This checks:
+- ✓ All services running
+- ✓ Network connectivity
+- ✓ Kafka topics created
+- ✓ Service health
+- ✓ Log errors
+
+### 📚 Deployment Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Get running in 5 minutes
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive 50+ page guide
+- **[LAB_DEPLOYMENT_READY.md](LAB_DEPLOYMENT_READY.md)** - Lab deployment scenarios
+- **[DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)** - Architecture and patterns
+
+**Key Features**:
+- ✅ No compilation environment required
+- ✅ Docker-based containerization
+- ✅ Environment variable configuration
+- ✅ Multiple deployment scenarios
+- ✅ Automated verification
+- ✅ Comprehensive documentation
+
 ## 🧪 Testing
 
 Run unit tests:
