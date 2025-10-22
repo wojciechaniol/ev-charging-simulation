@@ -152,10 +152,20 @@ class EVCentralController:
             f"(Circuit: {cp.circuit_breaker.get_state().value})"
         )
         
-        if cp.cp_e_host:
-            await cp.cp_e_host.handle_fault(reason)
+        # Send STOP_CP command to the engine via Kafka to enter safe state
+        if self.producer:
+            try:
+                command = CentralCommand(
+                    cmd=CommandType.STOP_CP,
+                    cp_id=cp_id,
+                    payload={"reason": reason}
+                )
+                await self.producer.send(TOPICS["CENTRAL_COMMANDS"], command, key=cp_id)
+                logger.info(f"Sent STOP_CP command to {cp_id} due to fault: {reason}")
+            except Exception as e:
+                logger.error(f"Failed to send STOP_CP command to {cp_id}: {e}")
         else:
-            logger.warning(f"CP {cp_id} has no attached engine — cannot send fault command")
+            logger.warning(f"CP {cp_id} marked as faulty but no Kafka producer available")
 
         # If CP has an active session, notify the driver
         if cp.current_driver:

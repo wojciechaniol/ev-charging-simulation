@@ -48,10 +48,10 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
         if cp_id in controller.charging_points:
             if status == "FAULT":
                 logger.warning(f"CP {cp_id} marked as faulty by monitor: {reason}")
-                controller.mark_cp_faulty(cp_id, reason)
+                await controller.mark_cp_faulty(cp_id, reason)
             elif status == "HEALTHY":
                 logger.info(f"CP {cp_id} health restored: {reason}")
-                controller.clear_cp_fault(cp_id)
+                await controller.clear_cp_fault(cp_id)
         
         return {"success": True, "cp_id": cp_id, "status": status}
     
