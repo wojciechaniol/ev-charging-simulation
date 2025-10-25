@@ -245,34 +245,100 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                 }}
             </style>
             <script>
-                function refresh() {{
-                    location.reload();
+                // Fetch and update data without page reload
+                async function updateDashboard() {{
+                    try {{
+                        const response = await fetch('/cp');
+                        const data = await response.json();
+                        
+                        // Update stats
+                        document.getElementById('total-cps').textContent = data.charging_points.length;
+                        document.getElementById('active-requests').textContent = data.active_requests;
+                        document.getElementById('currently-charging').textContent = 
+                            data.charging_points.filter(cp => cp.state === 'SUPPLYING').length;
+                        
+                        // Update CP cards
+                        const cpGrid = document.getElementById('cp-grid');
+                        cpGrid.innerHTML = '';
+                        
+                        data.charging_points.forEach(cp => {{
+                            const card = document.createElement('div');
+                            card.className = 'cp-card';
+                            
+                            let telemetryHtml = '';
+                            if (cp.telemetry) {{
+                                telemetryHtml = `
+                                    <div class="telemetry">
+                                        <div class="telemetry-row">
+                                            <span class="telemetry-label">Power:</span>
+                                            <span class="telemetry-value">${{cp.telemetry.kw.toFixed(2)}} kW</span>
+                                        </div>
+                                        <div class="telemetry-row">
+                                            <span class="telemetry-label">Cost:</span>
+                                            <span class="telemetry-value">€${{cp.telemetry.euros.toFixed(4)}}</span>
+                                        </div>
+                                        <div class="telemetry-row">
+                                            <span class="telemetry-label">Session:</span>
+                                            <span class="telemetry-value">${{cp.telemetry.session_id || 'N/A'}}</span>
+                                        </div>
+                                    </div>
+                                `;
+                            }}
+                            
+                            const driverHtml = cp.current_driver ? 
+                                `<div class="driver-info">👤 Driver: ${{cp.current_driver}}</div>` : '';
+                            
+                            card.innerHTML = `
+                                <div class="cp-header">
+                                    <div class="cp-id">${{cp.cp_id}}</div>
+                                    <span class="state-badge state-${{cp.state}}">${{cp.state}}</span>
+                                </div>
+                                ${{driverHtml}}
+                                ${{telemetryHtml}}
+                            `;
+                            
+                            cpGrid.appendChild(card);
+                        }});
+                        
+                        // Update timestamp
+                        document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+                    }} catch (error) {{
+                        console.error('Error updating dashboard:', error);
+                    }}
                 }}
-                // Auto-refresh every 2 seconds
-                setTimeout(() => {{ location.reload(); }}, 2000);
+                
+                function refresh() {{
+                    updateDashboard();
+                }}
+                
+                // Initial load
+                updateDashboard();
+                
+                // Auto-refresh every 1 second for real-time updates
+                setInterval(updateDashboard, 1000);
             </script>
         </head>
         <body>
             <div class="container">
-                <h1>⚡ EV Central Dashboard</h1>
+                <h1>⚡ EV Central Dashboard <span style="font-size: 0.5em; color: #999;">Last update: <span id="last-update">--:--:--</span></span></h1>
                 
                 <div class="stats">
                     <div class="stat-card">
-                        <div class="stat-value">{len(data['charging_points'])}</div>
+                        <div class="stat-value" id="total-cps">{len(data['charging_points'])}</div>
                         <div class="stat-label">Total Charging Points</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">{data['active_requests']}</div>
+                        <div class="stat-value" id="active-requests">{data['active_requests']}</div>
                         <div class="stat-label">Active Requests</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">{sum(1 for cp in data['charging_points'] if cp['state'] == 'SUPPLYING')}</div>
+                        <div class="stat-value" id="currently-charging">{sum(1 for cp in data['charging_points'] if cp['state'] == 'SUPPLYING')}</div>
                         <div class="stat-label">Currently Charging</div>
                     </div>
                 </div>
                 
                 <h2>Charging Points</h2>
-                <div class="cp-grid">
+                <div class="cp-grid" id="cp-grid">
         """
         
         for cp in data['charging_points']:

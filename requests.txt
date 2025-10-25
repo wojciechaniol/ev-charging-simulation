@@ -1,16 +1,25 @@
 # Charging point requests for autonomous testing
-# Multiple requests to demonstrate system functionality
-# Each driver will cycle through these CPs continuously
+# Comprehensive test set covering all 10 charging points
+# Each driver will cycle through these CPs with different intervals
+# This creates a realistic scenario with concurrent charging sessions
 
 CP-001
+CP-006
+CP-002
+CP-007
+CP-003
+CP-008
+CP-004
+CP-009
+CP-005
+CP-010
+CP-001
 CP-002
 CP-003
 CP-004
 CP-005
-CP-001
-CP-003
-CP-002
-CP-005
-CP-004
-CP-001
-CP-002
+CP-006
+CP-007
+CP-008
+CP-009
+CP-010

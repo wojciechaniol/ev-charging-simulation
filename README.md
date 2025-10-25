@@ -6,6 +6,54 @@ A distributed, event-driven electric vehicle charging management system demonstr
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## 🎬 Autonomous Operation
+
+**This system is designed for fully autonomous operation with ZERO user interaction required.**
+
+### ⚡ Quick Start (One Command)
+
+```bash
+docker compose up -d
+```
+
+That's it! The entire system will:
+- ✅ Start **26 services** automatically (1 Kafka, 1 Central, 10 CPs, 10 Monitors, 5 Drivers)
+- ✅ Initialize and connect without intervention
+- ✅ Begin autonomous charging operations
+- ✅ Demonstrate all functionality through observable terminal outputs
+- ✅ Run continuously and handle all scenarios (success, failures, recovery)
+
+### 📊 Observe the System
+
+**Web Dashboard** (real-time visual monitoring):
+```
+http://localhost:8000
+```
+
+**Terminal Logs** (detailed event streams):
+```bash
+./view-logs.sh all         # All services
+./view-logs.sh central     # Central controller only
+./view-logs.sh cp          # All charging points
+./view-logs.sh driver      # All drivers
+```
+
+### 🎯 What You'll See
+
+The system autonomously demonstrates:
+- 🔄 **Concurrent charging** across 10 charging points
+- 🚗 **5 drivers** continuously requesting charging sessions
+- 💚 **Health monitoring** with fault detection and recovery
+- ⚡ **Real-time telemetry** streaming (kW, cost, duration)
+- 🔌 **State machine** transitions for all CP lifecycle events
+- 🛡️ **Fault tolerance** with circuit breakers and automatic failover
+
+**No interaction needed** - just start it and observe! Perfect for validation, testing, and demonstrations.
+
+📖 **See [AUTONOMOUS_OPERATION.md](AUTONOMOUS_OPERATION.md) for complete details on what to observe and expect.**
+
+---
+
 ## 📖 Project Overview
 
 This project implements a realistic simulation of an EV charging network infrastructure, demonstrating how distributed systems coordinate to manage multiple charging points, handle driver requests, monitor system health, and ensure reliable power delivery.

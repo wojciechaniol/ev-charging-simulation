@@ -1,6 +1,25 @@
 # EV Charging Simulation - Extended Configuration
-# 15+ services for comprehensive autonomous testing
+# 25+ services for comprehensive autonomous testing
 # No user interaction required - fully autonomous operation
+# 
+# AUTONOMOUS OPERATION:
+# - 10 Charging Points (CP-001 to CP-010) with diverse power ratings
+# - 10 Health Monitors (one per CP)
+# - 5 Driver clients with different request intervals
+# - 1 Central Controller with web dashboard
+# - 1 Kafka message broker
+#
+# OBSERVABILITY:
+# - All terminals show clear, colored output
+# - Central: Request routing, CP status, session management
+# - CP Engines: State transitions, telemetry, charging sessions
+# - CP Monitors: Health checks, fault detection, recovery
+# - Drivers: Request status, charging progress, completion
+#
+# STARTUP: docker compose up -d
+# LOGS: docker compose logs -f [service-name]
+# DASHBOARD: http://localhost:8000
+# STOP: docker compose down
 
 services:
   # ========== INFRASTRUCTURE ==========
@@ -170,7 +189,107 @@ services:
       - evcharging-network
     restart: unless-stopped
 
-  # ========== CHARGING POINT MONITORS (5 Monitors) ==========
+  ev-cp-e-6:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-6
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: kafka:9092
+      CP_ENGINE_CP_ID: CP-006
+      CP_ENGINE_HEALTH_PORT: 8006
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 11.0
+      CP_ENGINE_EURO_RATE: 0.29
+      CP_ENGINE_TELEMETRY_INTERVAL: 1.0
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-e-7:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-7
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: kafka:9092
+      CP_ENGINE_CP_ID: CP-007
+      CP_ENGINE_HEALTH_PORT: 8007
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 100.0
+      CP_ENGINE_EURO_RATE: 0.38
+      CP_ENGINE_TELEMETRY_INTERVAL: 1.0
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-e-8:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-8
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: kafka:9092
+      CP_ENGINE_CP_ID: CP-008
+      CP_ENGINE_HEALTH_PORT: 8008
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 22.0
+      CP_ENGINE_EURO_RATE: 0.31
+      CP_ENGINE_TELEMETRY_INTERVAL: 1.0
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-e-9:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-9
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: kafka:9092
+      CP_ENGINE_CP_ID: CP-009
+      CP_ENGINE_HEALTH_PORT: 8009
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 75.0
+      CP_ENGINE_EURO_RATE: 0.36
+      CP_ENGINE_TELEMETRY_INTERVAL: 1.0
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-e-10:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-10
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: kafka:9092
+      CP_ENGINE_CP_ID: CP-010
+      CP_ENGINE_HEALTH_PORT: 8010
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 350.0
+      CP_ENGINE_EURO_RATE: 0.45
+      CP_ENGINE_TELEMETRY_INTERVAL: 1.0
+    depends_on:
+      kafka:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # ========== CHARGING POINT MONITORS (10 Monitors) ==========
   
   ev-cp-m-1:
     build:
@@ -272,7 +391,107 @@ services:
       - evcharging-network
     restart: unless-stopped
 
-  # ========== DRIVER CLIENTS (3 Drivers) ==========
+  ev-cp-m-6:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-6
+    environment:
+      CP_MONITOR_CP_ID: CP-006
+      CP_MONITOR_CP_E_HOST: ev-cp-e-6
+      CP_MONITOR_CP_E_PORT: 8006
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-6
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-m-7:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-7
+    environment:
+      CP_MONITOR_CP_ID: CP-007
+      CP_MONITOR_CP_E_HOST: ev-cp-e-7
+      CP_MONITOR_CP_E_PORT: 8007
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-7
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-m-8:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-8
+    environment:
+      CP_MONITOR_CP_ID: CP-008
+      CP_MONITOR_CP_E_HOST: ev-cp-e-8
+      CP_MONITOR_CP_E_PORT: 8008
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-8
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-m-9:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-9
+    environment:
+      CP_MONITOR_CP_ID: CP-009
+      CP_MONITOR_CP_E_HOST: ev-cp-e-9
+      CP_MONITOR_CP_E_PORT: 8009
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-9
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-cp-m-10:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-10
+    environment:
+      CP_MONITOR_CP_ID: CP-010
+      CP_MONITOR_CP_E_HOST: ev-cp-e-10
+      CP_MONITOR_CP_E_PORT: 8010
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-10
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # ========== DRIVER CLIENTS (5 Drivers) ==========
   
   ev-driver-alice:
     build:
@@ -325,6 +544,48 @@ services:
       DRIVER_DRIVER_ID: driver-charlie
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 7.0
+      DRIVER_LOG_LEVEL: INFO
+    volumes:
+      - ./requests.txt:/app/requests.txt:ro
+    depends_on:
+      kafka:
+        condition: service_started
+      ev-central:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-driver-david:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.driver
+    container_name: ev-driver-david
+    environment:
+      DRIVER_DRIVER_ID: driver-david
+      DRIVER_KAFKA_BOOTSTRAP: kafka:9092
+      DRIVER_REQUEST_INTERVAL: 8.0
+      DRIVER_LOG_LEVEL: INFO
+    volumes:
+      - ./requests.txt:/app/requests.txt:ro
+    depends_on:
+      kafka:
+        condition: service_started
+      ev-central:
+        condition: service_started
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  ev-driver-eve:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.driver
+    container_name: ev-driver-eve
+    environment:
+      DRIVER_DRIVER_ID: driver-eve
+      DRIVER_KAFKA_BOOTSTRAP: kafka:9092
+      DRIVER_REQUEST_INTERVAL: 4.5
       DRIVER_LOG_LEVEL: INFO
     volumes:
       - ./requests.txt:/app/requests.txt:ro
