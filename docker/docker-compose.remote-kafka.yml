@@ -66,8 +66,8 @@ services:
       CP_MONITOR_CP_ID: CP-001
       CP_MONITOR_CP_E_HOST: ev-cp-e-1
       CP_MONITOR_CP_E_PORT: 8001
-      CP_MONITOR_CENTRAL_HOST: ev-central
-      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 1.0
       CP_MONITOR_LOG_LEVEL: INFO
     depends_on:
@@ -87,8 +87,8 @@ services:
       CP_MONITOR_CP_ID: CP-002
       CP_MONITOR_CP_E_HOST: ev-cp-e-2
       CP_MONITOR_CP_E_PORT: 8001
-      CP_MONITOR_CENTRAL_HOST: ev-central
-      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 1.0
       CP_MONITOR_LOG_LEVEL: INFO
     depends_on:
@@ -109,6 +109,7 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
       DRIVER_REQUEST_INTERVAL: 4.0
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: ${CENTRAL_HTTP_URL:-http://ev-central:8000}
     volumes:
       - ../requests.txt:/app/requests.txt:ro
     depends_on:
