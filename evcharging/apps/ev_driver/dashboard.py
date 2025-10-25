@@ -608,7 +608,7 @@ def create_driver_dashboard_app(driver: "EVDriver") -> FastAPI:
             <div class="container">
                 <h1>
                     <span>🚗 Driver Dashboard</span>
-                    <span class="driver-badge">{{driver_id}}</span>
+                    <span class="driver-badge">{driver_id}</span>
                 </h1>
                 
                 <div class="status-bar">
