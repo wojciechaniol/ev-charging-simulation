@@ -3,7 +3,7 @@ Dashboard for EV Central - FastAPI web interface.
 Provides real-time view of charging points and telemetry.
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import TYPE_CHECKING
@@ -54,6 +54,16 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                 await controller.clear_cp_fault(cp_id)
         
         return {"success": True, "cp_id": cp_id, "status": status}
+
+    @app.post("/cp/heartbeat")
+    async def monitor_heartbeat(payload: dict):
+        """Receive heartbeat ping from CP Monitor."""
+        cp_id = payload.get("cp_id")
+        if not cp_id:
+            raise HTTPException(status_code=400, detail="cp_id required")
+
+        controller.record_monitor_ping(cp_id)
+        return {"success": True, "cp_id": cp_id}
     
     @app.get("/cp")
     async def list_charging_points():
@@ -202,6 +212,8 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                 .state-STOPPED {{ background: #ff9800; color: white; }}
                 .state-FAULT {{ background: #f44336; color: white; }}
                 .state-DISCONNECTED {{ background: #9e9e9e; color: white; }}
+                .state-ON {{ background: #4caf50; color: white; }}
+                .state-BROKEN {{ background: #f44336; color: white; }}
                 @keyframes pulse {{
                     0%, 100% {{ opacity: 1; }}
                     50% {{ opacity: 0.7; }}
@@ -222,7 +234,7 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                     font-weight: 500;
                 }}
                 .telemetry-value {{
-                    color: #333;
+                    color: #222;
                     font-weight: bold;
                 }}
                 .driver-info {{
@@ -246,6 +258,12 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
             </style>
             <script>
                 // Fetch and update data without page reload
+                function formatTime(ts) {{
+                    if (!ts) return 'Unknown';
+                    const date = new Date(ts);
+                    return date.toLocaleTimeString();
+                }}
+
                 async function updateDashboard() {{
                     try {{
                         const response = await fetch('/cp');
@@ -255,7 +273,7 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                         document.getElementById('total-cps').textContent = data.charging_points.length;
                         document.getElementById('active-requests').textContent = data.active_requests;
                         document.getElementById('currently-charging').textContent = 
-                            data.charging_points.filter(cp => cp.state === 'SUPPLYING').length;
+                            data.charging_points.filter(cp => cp.engine_state === 'SUPPLYING').length;
                         
                         // Update CP cards
                         const cpGrid = document.getElementById('cp-grid');
@@ -265,29 +283,52 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                             const card = document.createElement('div');
                             card.className = 'cp-card';
                             
-                            let telemetryHtml = '';
+                            let telemetryRows = '';
                             if (cp.telemetry) {{
-                                telemetryHtml = `
-                                    <div class="telemetry">
-                                        <div class="telemetry-row">
-                                            <span class="telemetry-label">Power:</span>
-                                            <span class="telemetry-value">${{cp.telemetry.kw.toFixed(2)}} kW</span>
-                                        </div>
-                                        <div class="telemetry-row">
-                                            <span class="telemetry-label">Energy:</span>
-                                            <span class="telemetry-value">${{cp.telemetry.kwh.toFixed(3)}} kWh</span>
-                                        </div>
-                                        <div class="telemetry-row">
-                                            <span class="telemetry-label">Cost:</span>
-                                            <span class="telemetry-value">€${{cp.telemetry.euros.toFixed(4)}}</span>
-                                        </div>
-                                        <div class="telemetry-row">
-                                            <span class="telemetry-label">Session:</span>
-                                            <span class="telemetry-value">${{cp.telemetry.session_id || 'N/A'}}</span>
-                                        </div>
+                                telemetryRows = `
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Power:</span>
+                                        <span class="telemetry-value">${{cp.telemetry.kw.toFixed(2)}} kW</span>
+                                    </div>
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Energy:</span>
+                                        <span class="telemetry-value">${{cp.telemetry.kwh.toFixed(3)}} kWh</span>
+                                    </div>
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Cost:</span>
+                                        <span class="telemetry-value">€${{cp.telemetry.euros.toFixed(4)}}</span>
+                                    </div>
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Session:</span>
+                                        <span class="telemetry-value">${{cp.telemetry.session_id || 'N/A'}}</span>
+                                    </div>
+                                `;
+                            }} else {{
+                                telemetryRows = `
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Power:</span>
+                                        <span class="telemetry-value">N/A</span>
                                     </div>
                                 `;
                             }}
+
+                            const statusHtml = `
+                                <div class="telemetry">
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Monitor:</span>
+                                        <span class="telemetry-value">${{cp.monitor_status}}</span>
+                                    </div>
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Engine:</span>
+                                        <span class="telemetry-value">${{cp.engine_state}}</span>
+                                    </div>
+                                    <div class="telemetry-row">
+                                        <span class="telemetry-label">Last Monitor Ping:</span>
+                                        <span class="telemetry-value">${{formatTime(cp.monitor_last_seen)}}</span>
+                                    </div>
+                                    ${{telemetryRows}}
+                                </div>
+                            `;
                             
                             const driverHtml = cp.current_driver ? 
                                 `<div class="driver-info">👤 Driver: ${{cp.current_driver}}</div>` : '';
@@ -298,7 +339,7 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                                     <span class="state-badge state-${{cp.state}}">${{cp.state}}</span>
                                 </div>
                                 ${{driverHtml}}
-                                ${{telemetryHtml}}
+                                ${{statusHtml}}
                             `;
                             
                             cpGrid.appendChild(card);
@@ -336,40 +377,62 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                         <div class="stat-label">Active Requests</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value" id="currently-charging">{sum(1 for cp in data['charging_points'] if cp['state'] == 'SUPPLYING')}</div>
+                        <div class="stat-value" id="currently-charging">{sum(1 for cp in data['charging_points'] if cp['engine_state'] == 'SUPPLYING')}</div>
                         <div class="stat-label">Currently Charging</div>
                     </div>
                 </div>
                 
                 <h2>Charging Points</h2>
                 <div class="cp-grid" id="cp-grid">
-        """
+            """
         
         for cp in data['charging_points']:
-            telemetry_html = ""
+            telemetry_rows = ""
             if cp.get('telemetry'):
                 t = cp['telemetry']
-                telemetry_html = f"""
-                    <div class="telemetry">
-                        <div class="telemetry-row">
-                            <span class="telemetry-label">Power:</span>
-                            <span class="telemetry-value">{t['kw']:.2f} kW</span>
-                        </div>
-                        <div class="telemetry-row">
-                            <span class="telemetry-label">Energy:</span>
-                            <span class="telemetry-value">{t['kwh']:.3f} kWh</span>
-                        </div>
-                        <div class="telemetry-row">
-                            <span class="telemetry-label">Cost:</span>
-                            <span class="telemetry-value">€{t['euros']:.2f}</span>
-                        </div>
-                        <div class="telemetry-row">
-                            <span class="telemetry-label">Session:</span>
-                            <span class="telemetry-value">{t.get('session_id', 'N/A')}</span>
-                        </div>
+                telemetry_rows = f"""
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Power:</span>
+                        <span class="telemetry-value">{t['kw']:.2f} kW</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Energy:</span>
+                        <span class="telemetry-value">{t['kwh']:.3f} kWh</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Cost:</span>
+                        <span class="telemetry-value">€{t['euros']:.2f}</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Session:</span>
+                        <span class="telemetry-value">{t.get('session_id', 'N/A')}</span>
                     </div>
                 """
-            
+            else:
+                telemetry_rows = """
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Power:</span>
+                        <span class="telemetry-value">N/A</span>
+                    </div>
+                """
+
+            status_html = f"""
+                <div class="telemetry">
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Monitor:</span>
+                        <span class="telemetry-value">{cp['monitor_status']}</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Engine:</span>
+                        <span class="telemetry-value">{cp['engine_state']}</span>
+                    </div>
+                    <div class="telemetry-row">
+                        <span class="telemetry-label">Last Monitor Ping:</span>
+                        <span class="telemetry-value">{cp.get('monitor_last_seen', 'Unknown')}</span>
+                    </div>
+                    {telemetry_rows}
+                </div>
+            """
             driver_html = f'<div class="driver-info">👤 Driver: {cp["current_driver"]}</div>' if cp.get('current_driver') else ''
             
             html_content += f"""
@@ -379,7 +442,7 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                             <span class="state-badge state-{cp['state']}">{cp['state']}</span>
                         </div>
                         {driver_html}
-                        {telemetry_html}
+                        {status_html}
                     </div>
             """
         

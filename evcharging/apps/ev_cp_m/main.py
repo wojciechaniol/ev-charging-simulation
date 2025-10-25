@@ -69,9 +69,27 @@ class CPMonitor:
                     logger.info(f"CP {self.cp_id} registered with Central successfully")
                 else:
                     logger.error(f"Failed to register CP: {response.status_code} {response.text}")
-        
+
         except Exception as e:
             logger.error(f"Error registering with Central: {e}")
+
+    async def send_heartbeat(self):
+        """Send heartbeat to Central indicating monitor is alive."""
+        central_url = f"http://{self.config.central_host}:{self.config.central_port}"
+        heartbeat = {
+            "cp_id": self.cp_id,
+            "ts": utc_now().isoformat()
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{central_url}/cp/heartbeat",
+                    json=heartbeat,
+                    timeout=5.0
+                )
+        except Exception as e:
+            logger.debug(f"Heartbeat send failed for {self.cp_id}: {e}")
     
     async def notify_central_fault(self):
         """Notify Central that this CP has a fault."""
@@ -133,6 +151,8 @@ class CPMonitor:
         
         while self._running:
             try:
+                await self.send_heartbeat()
+
                 # Skip health check if fault is manually simulated
                 if self.fault_simulated:
                     if self.is_healthy:
