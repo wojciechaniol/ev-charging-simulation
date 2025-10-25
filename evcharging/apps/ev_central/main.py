@@ -268,14 +268,13 @@ class EVCentralController:
         # Record health snapshot to database
         self.db.record_health_snapshot(
             cp_id=cp_id,
-            state=status.state.value,
-            is_faulty=cp.is_faulty,
-            fault_reason=cp.fault_reason,
-            circuit_breaker_state=cp.circuit_breaker.get_state().value
+            is_healthy=not cp.is_faulty,
+            state=cp.state.value,
+            circuit_state=cp.circuit_breaker.get_state().value
         )
         
         logger.debug(
-            f"Status from {cp_id}: {status.state.value} (was {old_state.value})"
+            f"Status from {cp_id}: {cp.state.value} (was {old_state.value})"
         )
         
         # Handle state transitions
@@ -401,6 +400,7 @@ class EVCentralController:
                     "telemetry": (
                         {
                             "kw": cp.last_telemetry.kw,
+                            "kwh": cp.last_telemetry.kwh,
                             "euros": cp.last_telemetry.euros,
                             "session_id": cp.last_telemetry.session_id,
                         }

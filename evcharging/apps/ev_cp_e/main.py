@@ -234,6 +234,7 @@ class CPEngine:
                 telemetry = CPTelemetry(
                     cp_id=self.cp_id,
                     kw=self.config.kw_rate,
+                    kwh=self.current_session.cumulative_kwh,
                     euros=self.current_session.cumulative_euros,
                     driver_id=self.current_session.driver_id,
                     session_id=self.current_session.session_id

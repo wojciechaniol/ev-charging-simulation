@@ -274,6 +274,10 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                                             <span class="telemetry-value">${{cp.telemetry.kw.toFixed(2)}} kW</span>
                                         </div>
                                         <div class="telemetry-row">
+                                            <span class="telemetry-label">Energy:</span>
+                                            <span class="telemetry-value">${{cp.telemetry.kwh.toFixed(3)}} kWh</span>
+                                        </div>
+                                        <div class="telemetry-row">
                                             <span class="telemetry-label">Cost:</span>
                                             <span class="telemetry-value">€${{cp.telemetry.euros.toFixed(4)}}</span>
                                         </div>
@@ -350,6 +354,10 @@ def create_dashboard_app(controller: "EVCentralController") -> FastAPI:
                         <div class="telemetry-row">
                             <span class="telemetry-label">Power:</span>
                             <span class="telemetry-value">{t['kw']:.2f} kW</span>
+                        </div>
+                        <div class="telemetry-row">
+                            <span class="telemetry-label">Energy:</span>
+                            <span class="telemetry-value">{t['kwh']:.3f} kWh</span>
                         </div>
                         <div class="telemetry-row">
                             <span class="telemetry-label">Cost:</span>
