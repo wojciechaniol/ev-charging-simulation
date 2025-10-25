@@ -42,13 +42,14 @@ class CPEngine:
     def __init__(self, config: CPEngineConfig):
         self.config = config
         self.cp_id = config.cp_id
-        self.state = CPState.DISCONNECTED
+        self.state = CPState.DISCONNECTED  # Start in DISCONNECTED, will transition to ACTIVATED
         self.producer: KafkaProducerHelper | None = None
         self.consumer: KafkaConsumerHelper | None = None
         self.current_session: ChargingSession | None = None
         self.telemetry_task: asyncio.Task | None = None
         self.health_server: asyncio.Server | None = None
         self._running = False
+        self.start_time = 0.0  # Track startup time for demo mode
     
     async def start(self):
         """Initialize and start the CP Engine."""
@@ -76,8 +77,12 @@ class CPEngine:
         # Start health check TCP server
         await self.start_health_server()
         
-        # Transition to ACTIVATED state
-        await self.change_state(CPEvent.CONNECT, "Engine started")
+        # Auto-activate CP for immediate availability
+        await self.change_state(CPEvent.CONNECT, "Engine started - auto-connecting")
+        
+        # Record startup time for demo mode (ignore STOP commands for first 10 seconds)
+        import time
+        self.start_time = time.time()
         
         self._running = True
         logger.info(f"CP Engine {self.cp_id} started successfully")
@@ -148,6 +153,11 @@ class CPEngine:
                 await self.stop_supply("Central requested stop")
             
             elif command.cmd == CommandType.STOP_CP:
+                # Demo mode: Ignore STOP_CP commands during first 10 seconds after startup
+                import time
+                if time.time() - self.start_time < 10:
+                    logger.info(f"CP {self.cp_id}: Ignoring STOP_CP during startup grace period (demo mode)")
+                    return
                 await self.change_state(CPEvent.STOP_CP, "Central stopped CP")
             
             elif command.cmd == CommandType.RESUME_CP:

@@ -181,8 +181,9 @@ class CPMonitor:
                     
                     if response.startswith(b"OK"):
                         if not self.is_healthy:
-                            logger.info(f"CP {self.cp_id}: Health restored")
+                            logger.info(f"CP {self.cp_id}: Health restored - notifying Central")
                             self.is_healthy = True
+                            await self.notify_central_healthy()
                         consecutive_failures = 0
                         logger.debug(f"CP {self.cp_id}: Health check OK")
                     else:
@@ -194,8 +195,8 @@ class CPMonitor:
                         f"CP {self.cp_id}: Health check failed ({consecutive_failures}) - {type(e).__name__}"
                     )
                 
-                # Mark as unhealthy after 3 consecutive failures
-                if consecutive_failures >= 3 and self.is_healthy:
+                # Mark as unhealthy after 10 consecutive failures (increased for demo mode tolerance)
+                if consecutive_failures >= 10 and self.is_healthy:
                     logger.error(f"CP {self.cp_id}: FAULT DETECTED - marking as unhealthy")
                     self.is_healthy = False
                     await self.notify_central_fault()

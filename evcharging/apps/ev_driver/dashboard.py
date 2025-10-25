@@ -106,7 +106,7 @@ def create_driver_dashboard_app(driver: "EVDriver") -> FastAPI:
     # Charging point discovery
     # ------------------------------------------------------------------
 
-    @app.get("/charging-points", response_model=List[ChargingPointStatus])
+    @app.get("/charging-points", response_model=List[ChargingPointDetail])
     async def list_charging_points(
         city: Optional[str] = Query(None, description="Filter by city"),
         connector_type: Optional[str] = Query(None, description="Filter by connector type"),
@@ -700,7 +700,14 @@ def create_driver_dashboard_app(driver: "EVDriver") -> FastAPI:
                 async function loadChargingPoints() {{
                     try {{
                         const response = await fetch('/charging-points');
+                        if (!response.ok) {{
+                            throw new Error(`HTTP error! status: ${{response.status}}`);
+                        }}
                         const data = await response.json();
+                        console.log('Loaded charging points:', data);
+                        if (!Array.isArray(data)) {{
+                            throw new Error('Expected array of charging points');
+                        }}
                         chargingPoints = data;
                         renderChargingPoints();
                     }} catch (error) {{
@@ -784,10 +791,12 @@ def create_driver_dashboard_app(driver: "EVDriver") -> FastAPI:
                                     <span>⚡ Power:</span>
                                     <strong>${{cp.power_kw}} kW</strong>
                                 </div>
+                                ${{cp.price_eur_per_kwh ? `
                                 <div class="cp-detail-row">
                                     <span>💰 Price:</span>
                                     <strong>€${{cp.price_eur_per_kwh.toFixed(2)}}/kWh</strong>
                                 </div>
+                                ` : ''}}
                                 ${{cp.distance_km ? `
                                 <div class="cp-detail-row">
                                     <span>📏 Distance:</span>
@@ -991,13 +1000,20 @@ def create_driver_dashboard_app(driver: "EVDriver") -> FastAPI:
                     
                     try {{
                         const response = await fetch(`/charging-points?${{params}}`);
+                        if (!response.ok) {{
+                            throw new Error(`HTTP error! status: ${{response.status}}`);
+                        }}
                         const data = await response.json();
+                        console.log('Filtered charging points:', data);
+                        if (!Array.isArray(data)) {{
+                            throw new Error('Expected array of charging points');
+                        }}
                         chargingPoints = data;
                         renderChargingPoints();
                         showNotification(`Found ${{data.length}} charging points`, 'info');
                     }} catch (error) {{
                         console.error('Error applying filters:', error);
-                        showNotification('Error applying filters', 'error');
+                        showNotification('Error applying filters: ' + error.message, 'error');
                     }}
                 }}
                 
