@@ -71,6 +71,8 @@ class DriverConfig(BaseSettings):
     requests_file: Optional[str] = Field(default=None, description="File with CP IDs to request")
     request_interval: float = Field(default=4.0, description="Interval between requests (seconds)")
     log_level: str = Field(default="INFO", description="Logging level")
+    dashboard_port: int = Field(default=8100, description="HTTP dashboard port")
+    central_http_url: str = Field(default="http://localhost:8000", description="EV Central HTTP base URL")
     
     model_config = SettingsConfigDict(
         env_prefix="DRIVER_",

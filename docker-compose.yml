@@ -503,8 +503,12 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 5.0
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_DASHBOARD_PORT: 8100
+      DRIVER_CENTRAL_HTTP_URL: http://ev-central:8000
     volumes:
       - ./requests.txt:/app/requests.txt:ro
+    ports:
+      - "8100:8100"
     depends_on:
       kafka:
         condition: service_started
@@ -524,6 +528,7 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 6.0
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: http://ev-central:8000
     volumes:
       - ./requests.txt:/app/requests.txt:ro
     depends_on:
@@ -545,6 +550,7 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 7.0
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: http://ev-central:8000
     volumes:
       - ./requests.txt:/app/requests.txt:ro
     depends_on:
@@ -566,6 +572,7 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 8.0
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: http://ev-central:8000
     volumes:
       - ./requests.txt:/app/requests.txt:ro
     depends_on:
@@ -587,6 +594,7 @@ services:
       DRIVER_KAFKA_BOOTSTRAP: kafka:9092
       DRIVER_REQUEST_INTERVAL: 4.5
       DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: http://ev-central:8000
     volumes:
       - ./requests.txt:/app/requests.txt:ro
     depends_on:
