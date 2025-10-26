@@ -98,6 +98,44 @@ services:
       - evcharging-network
     restart: unless-stopped
 
+  # Charging Point Engine 3
+  ev-cp-e-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-3
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CP_ENGINE_CP_ID: CP-003
+      CP_ENGINE_HEALTH_PORT: 8001
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 11.0
+      CP_ENGINE_EURO_RATE: 0.29
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Monitor 3
+  ev-cp-m-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-3
+    environment:
+      CP_MONITOR_CP_ID: CP-003
+      CP_MONITOR_CP_E_HOST: ev-cp-e-3
+      CP_MONITOR_CP_E_PORT: 8001
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 1.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-central
+      - ev-cp-e-3
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
   # EV Driver Client
   ev-driver:
     build:

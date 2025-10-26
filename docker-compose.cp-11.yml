@@ -1,0 +1,35 @@
+services:
+  ev-cp-e-11:
+    image: ev-charging-simulation-ev-cp-e-1
+    container_name: ev-cp-e-11
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CP_ENGINE_CP_ID: CP-011
+      CP_ENGINE_HEALTH_PORT: 8001
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 75.0
+      CP_ENGINE_EURO_RATE: 0.38
+    networks:
+      - ev-charging-simulation_evcharging-network
+    restart: unless-stopped
+
+  ev-cp-m-11:
+    image: ev-charging-simulation-ev-cp-m-1
+    container_name: ev-cp-m-11
+    environment:
+      CP_MONITOR_CP_ID: CP-011
+      CP_MONITOR_CP_E_HOST: ev-cp-e-11
+      CP_MONITOR_CP_E_PORT: 8001
+      CP_MONITOR_CENTRAL_HOST: ev-central
+      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_HEALTH_INTERVAL: 2.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    depends_on:
+      - ev-cp-e-11
+    networks:
+      - ev-charging-simulation_evcharging-network
+    restart: unless-stopped
+
+networks:
+  ev-charging-simulation_evcharging-network:
+    external: true
