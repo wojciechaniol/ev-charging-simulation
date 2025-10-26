@@ -84,6 +84,7 @@ def test_cp_telemetry_fields():
     telemetry = CPTelemetry(
         cp_id="CP-001",
         kw=22.5,
+        kwh=1.5,
         euros=3.75,
         driver_id="driver-123",
         session_id="session-001"
@@ -91,6 +92,7 @@ def test_cp_telemetry_fields():
     
     assert telemetry.cp_id == "CP-001"
     assert telemetry.kw == 22.5
+    assert telemetry.kwh == 1.5
     assert telemetry.euros == 3.75
     assert telemetry.driver_id == "driver-123"
     assert telemetry.session_id == "session-001"

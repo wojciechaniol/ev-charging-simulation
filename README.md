@@ -6,6 +6,54 @@ A distributed, event-driven electric vehicle charging management system demonstr
 [![Docker](https://img.shields.io/badge/docker-required-blue.svg)](https://www.docker.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## 🎬 Autonomous Operation
+
+**This system is designed for fully autonomous operation with ZERO user interaction required.**
+
+### ⚡ Quick Start (One Command)
+
+```bash
+docker compose up -d
+```
+
+That's it! The entire system will:
+- ✅ Start **26 services** automatically (1 Kafka, 1 Central, 10 CPs, 10 Monitors, 5 Drivers)
+- ✅ Initialize and connect without intervention
+- ✅ Begin autonomous charging operations
+- ✅ Demonstrate all functionality through observable terminal outputs
+- ✅ Run continuously and handle all scenarios (success, failures, recovery)
+
+### 📊 Observe the System
+
+**Web Dashboard** (real-time visual monitoring):
+```
+http://localhost:8000
+```
+
+**Terminal Logs** (detailed event streams):
+```bash
+./view-logs.sh all         # All services
+./view-logs.sh central     # Central controller only
+./view-logs.sh cp          # All charging points
+./view-logs.sh driver      # All drivers
+```
+
+### 🎯 What You'll See
+
+The system autonomously demonstrates:
+- 🔄 **Concurrent charging** across 10 charging points
+- 🚗 **5 drivers** continuously requesting charging sessions
+- 💚 **Health monitoring** with fault detection and recovery
+- ⚡ **Real-time telemetry** streaming (kW, cost, duration)
+- 🔌 **State machine** transitions for all CP lifecycle events
+- 🛡️ **Fault tolerance** with circuit breakers and automatic failover
+
+**No interaction needed** - just start it and observe! Perfect for validation, testing, and demonstrations.
+
+📖 **See [AUTONOMOUS_OPERATION.md](AUTONOMOUS_OPERATION.md) for complete details on what to observe and expect.**
+
+---
+
 ## 📖 Project Overview
 
 This project implements a realistic simulation of an EV charging network infrastructure, demonstrating how distributed systems coordinate to manage multiple charging points, handle driver requests, monitor system health, and ensure reliable power delivery.
@@ -357,6 +405,96 @@ The web dashboard at http://localhost:8000 displays:
 ![Dashboard](docs/dashboard-preview.png)
 
 *The dashboard shows all charging points with their current states, active sessions, and real-time power/cost metrics.*
+
+## 🏢 Deployment Options
+
+The system supports **multiple deployment scenarios** without requiring compilation environments. All builds are containerized for consistent, reproducible deployments.
+
+### 📦 Deployment Scenarios
+
+#### 1. Full Local Deployment (Single Machine)
+
+Perfect for development and testing:
+
+```bash
+docker compose up -d
+```
+
+**What's included**: Kafka, Central, 2x CP Engines, 2x CP Monitors, Driver
+
+#### 2. Remote Kafka Deployment
+
+Use existing Kafka infrastructure:
+
+```bash
+export KAFKA_BOOTSTRAP=kafka.example.com:9092
+docker compose -f docker/docker-compose.remote-kafka.yml up -d
+```
+
+#### 3. Lab Machine Deployment (Distributed)
+
+Deploy components across multiple machines:
+
+**Machine A** (Kafka + Central):
+```bash
+docker compose up -d kafka ev-central
+```
+
+**Machine B** (Charging Points):
+```bash
+export KAFKA_BOOTSTRAP=<machine-a-ip>:9092
+docker compose up -d ev-cp-e-1 ev-cp-e-2 ev-cp-m-1 ev-cp-m-2
+```
+
+#### 4. Interactive Deployment
+
+Use the deployment script for guided setup:
+
+```bash
+./deploy.sh
+```
+
+### ✅ Verification
+
+After deployment, verify the system:
+
+```bash
+./verify.sh
+```
+
+This checks:
+- ✓ All services running
+- ✓ Network connectivity
+- ✓ Kafka topics created
+- ✓ Service health
+- ✓ Log errors
+
+### 📚 Deployment Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Get running in 5 minutes
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive 50+ page guide
+- **[LAB_DEPLOYMENT_READY.md](LAB_DEPLOYMENT_READY.md)** - Lab deployment scenarios
+- **[DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)** - Architecture and patterns
+
+### 📚 Fault Tolerance Documentation
+
+- **[RECOVERY_SCALABILITY_GUIDE.md](RECOVERY_SCALABILITY_GUIDE.md)** - 🔄 Recovery and horizontal scaling guide
+- **[CP_STATUS_LOGIC.md](CP_STATUS_LOGIC.md)** - 🔌 Charging Point status determination (Monitor/Engine logic)
+- **[FAULT_TOLERANCE.md](FAULT_TOLERANCE.md)** - Complete fault tolerance implementation
+- **[FAULT_TOLERANCE_QUICKREF.md](FAULT_TOLERANCE_QUICKREF.md)** - Quick reference guide
+- **[AUTONOMOUS_OPERATION_VALIDATION.md](AUTONOMOUS_OPERATION_VALIDATION.md)** - Autonomous operation tests
+
+### 📚 Protocol Documentation
+
+- **[TCP_FRAMING_PROTOCOL.md](TCP_FRAMING_PROTOCOL.md)** - 📡 TCP message framing protocol (`<STX><DATA><ETX><LRC>`)
+
+**Key Features**:
+- ✅ No compilation environment required
+- ✅ Docker-based containerization
+- ✅ Environment variable configuration
+- ✅ Multiple deployment scenarios
+- ✅ Automated verification
+- ✅ Comprehensive documentation
 
 ## 🧪 Testing
 

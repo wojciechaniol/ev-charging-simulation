@@ -113,6 +113,7 @@ class CPTelemetry(BaseModel):
     """Real-time telemetry from CP_E during charging session."""
     cp_id: str = Field(..., description="Charging point identifier")
     kw: float = Field(..., description="Current power delivery in kW")
+    kwh: float = Field(..., description="Cumulative energy delivered in kWh")
     euros: float = Field(..., description="Cumulative cost in euros")
     driver_id: Optional[str] = Field(None, description="Current driver (non-personal demo ID)")
     session_id: Optional[str] = Field(None, description="Current charging session ID")
@@ -123,6 +124,7 @@ class CPTelemetry(BaseModel):
             "example": {
                 "cp_id": "CP-001",
                 "kw": 22.5,
+                "kwh": 1.2,
                 "euros": 3.75,
                 "driver_id": "driver-123",
                 "session_id": "session-001",

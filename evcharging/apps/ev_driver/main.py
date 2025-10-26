@@ -11,13 +11,28 @@ Responsibilities:
 import asyncio
 import argparse
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Dict, List, Optional
+
+import httpx
 from loguru import logger
+from uvicorn import Config, Server
 
 from evcharging.common.config import DriverConfig, TOPICS
 from evcharging.common.kafka import KafkaProducerHelper, KafkaConsumerHelper, ensure_topics
 from evcharging.common.messages import DriverRequest, DriverUpdate, MessageStatus
 from evcharging.common.utils import generate_id, utc_now
+from evcharging.common.charging_points import get_metadata
+from evcharging.apps.ev_driver.dashboard import (
+    create_driver_dashboard_app,
+    ChargingPointDetail,
+    SessionSummary,
+    SessionHistoryEntry,
+    Notification,
+    BroadcastAlert,
+    Location,
+)
 
 
 class EVDriver:
@@ -30,6 +45,18 @@ class EVDriver:
         self.consumer: KafkaConsumerHelper | None = None
         self.pending_requests: dict[str, DriverRequest] = {}
         self.completed_requests: list[str] = []
+        self.session_state: Dict[str, SessionSummary] = {}
+        self.session_history: List[SessionHistoryEntry] = []
+        self.notifications: List[Notification] = []
+        self.alerts: List[BroadcastAlert] = []
+        self.favorites: set[str] = set()
+        self.charging_points: Dict[str, ChargingPointDetail] = {}
+        self._state_lock = asyncio.Lock()
+        self._poll_task: Optional[asyncio.Task] = None
+        self._dashboard_task: Optional[asyncio.Task] = None
+        self._running = False
+        self.central_http_url = config.central_http_url.rstrip("/")
+        self.dashboard_port = config.dashboard_port
     
     async def start(self):
         """Initialize and start the driver client."""
@@ -55,10 +82,19 @@ class EVDriver:
         await self.consumer.start()
         
         logger.info(f"Driver {self.driver_id} started successfully")
+        self._running = True
+        self._poll_task = asyncio.create_task(self._poll_central_loop(), name="driver-poll-central")
     
     async def stop(self):
         """Stop the driver client gracefully."""
         logger.info(f"Stopping Driver: {self.driver_id}")
+        self._running = False
+        if self._poll_task and not self._poll_task.done():
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
         
         if self.consumer:
             await self.consumer.stop()
@@ -110,6 +146,16 @@ class EVDriver:
             f"(request_id: {request_id})"
         )
         
+        await self._record_request_state(
+            SessionSummary(
+                session_id="pending-" + request_id,
+                request_id=request_id,
+                cp_id=cp_id,
+                status="PENDING",
+                queue_position=None,
+            )
+        )
+        
         return request
     
     async def handle_update(self, update: DriverUpdate):
@@ -133,6 +179,8 @@ class EVDriver:
             f"{status_emoji} Driver {self.driver_id} | {update.cp_id} | "
             f"{update.status.upper()} | {update.reason or 'No details'}"
         )
+        
+        await self._apply_status_update(update)
         
         # Mark as completed if terminal state
         if update.status in {MessageStatus.COMPLETED, MessageStatus.DENIED, MessageStatus.FAILED}:
@@ -190,6 +238,273 @@ class EVDriver:
                 await asyncio.sleep(self.config.request_interval)
         
         logger.info(f"✨ All requests completed. Total: {len(self.completed_requests)}/{len(cp_ids)}")
+    
+    # ------------------------------------------------------------------
+    # Dashboard state helpers
+    # ------------------------------------------------------------------
+
+    async def _poll_central_loop(self):
+        """Poll EV Central dashboard endpoint to keep CP state fresh."""
+        logger.info("Driver: starting central polling loop")
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            while self._running:
+                try:
+                    resp = await client.get(f"{self.central_http_url}/cp")
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    await self._update_charging_points(payload.get("charging_points", []))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    logger.debug(f"Driver: central polling error: {exc}")
+                await asyncio.sleep(1.5)
+        logger.info("Driver: central polling loop stopped")
+
+    async def _update_charging_points(self, central_points: List[dict]):
+        async with self._state_lock:
+            for item in central_points:
+                cp_id = item["cp_id"]
+                meta = get_metadata(cp_id)
+                if not meta:
+                    continue
+                status = self._map_engine_status(item)
+                telemetry = item.get("telemetry") or {}
+                detail = ChargingPointDetail(
+                    cp_id=cp_id,
+                    name=meta.name,
+                    status=status,
+                    power_kw=meta.power_kw,
+                    connector_type=meta.connector_type,
+                    location=Location(
+                        address=meta.address,
+                        city=meta.city,
+                        latitude=meta.latitude,
+                        longitude=meta.longitude,
+                        distance_km=None,
+                    ),
+                    queue_length=1 if status == "OCCUPIED" else 0,
+                    estimated_wait_minutes=15 if status == "OCCUPIED" else 0,
+                    favorite=cp_id in self.favorites,
+                    amenities=meta.amenities,
+                    price_eur_per_kwh=0.30 if meta.connector_type == "Type 2" else 0.42,
+                    last_updated=utc_now(),
+                )
+                # Inject telemetry into detail if present
+                if telemetry:
+                    detail.estimated_wait_minutes = 0 if status != "OCCUPIED" else max(
+                        detail.estimated_wait_minutes,
+                        10
+                    )
+                self.charging_points[cp_id] = detail
+
+                energy = telemetry.get("kwh") if telemetry else None
+                cost = telemetry.get("euros") if telemetry else None
+
+                for req_id, summary in list(self.session_state.items()):
+                    if summary.cp_id == cp_id and summary.status == "CHARGING":
+                        self.session_state[req_id] = summary.model_copy(
+                            update={
+                                "energy_kwh": energy,
+                                "cost_eur": cost,
+                            }
+                        )
+
+                if status == "OFFLINE":
+                    for summary in self.session_state.values():
+                        if summary.cp_id == cp_id and summary.status in {"PENDING", "APPROVED"}:
+                            note = Notification(
+                                notification_id=generate_id("note"),
+                                created_at=utc_now(),
+                                message=f"Charging point {cp_id} is currently offline.",
+                                type="ALERT",
+                                read=False,
+                            )
+                            self.notifications.append(note)
+
+    def _map_engine_status(self, point: dict) -> str:
+        state = point.get("engine_state")
+        display_state = point.get("state")
+        current_driver = point.get("current_driver")
+        if display_state == "DISCONNECTED":
+            return "OFFLINE"
+        if display_state == "BROKEN":
+            return "OFFLINE"
+        if state == "SUPPLYING" or current_driver:
+            return "OCCUPIED"
+        return "FREE"
+
+    async def _record_request_state(self, summary: SessionSummary):
+        async with self._state_lock:
+            self.session_state[summary.request_id] = summary
+
+    async def _apply_status_update(self, update: DriverUpdate):
+        status_map = {
+            MessageStatus.ACCEPTED: "APPROVED",
+            MessageStatus.IN_PROGRESS: "CHARGING",
+            MessageStatus.COMPLETED: "COMPLETED",
+            MessageStatus.DENIED: "DENIED",
+            MessageStatus.FAILED: "FAILED",
+        }
+        new_status = status_map.get(update.status, "PENDING")
+        async with self._state_lock:
+            current = self.session_state.get(update.request_id)
+            if not current:
+                current = SessionSummary(
+                    session_id=generate_id("session"),
+                    request_id=update.request_id,
+                    cp_id=update.cp_id,
+                    status=new_status,
+                )
+            updated = current.model_copy(
+                update={
+                    "status": new_status,
+                    "started_at": current.started_at or (utc_now() if new_status == "CHARGING" else None),
+                    "completed_at": utc_now() if new_status in {"COMPLETED", "DENIED", "FAILED"} else None,
+                }
+            )
+            self.session_state[update.request_id] = updated
+
+            note = Notification(
+                notification_id=generate_id("note"),
+                created_at=utc_now(),
+                message=update.reason or f"Session {new_status.lower()} for {update.cp_id}",
+                type="SESSION",
+                read=False,
+            )
+            self.notifications.append(note)
+
+            if new_status in {"COMPLETED", "DENIED", "FAILED"}:
+                history_entry = SessionHistoryEntry(
+                    **updated.model_dump(),
+                    receipt_url=None,
+                )
+                self.session_history.append(history_entry)
+
+    # ------------------------------------------------------------------
+    # Dashboard-facing getters
+    # ------------------------------------------------------------------
+
+    async def dashboard_charging_points(self, **filters) -> List[ChargingPointDetail]:
+        async with self._state_lock:
+            points = list(self.charging_points.values())
+        city = filters.get("city")
+        connector_type = filters.get("connector_type")
+        min_power_kw = filters.get("min_power_kw")
+        only_available = filters.get("only_available")
+        if city:
+            points = [p for p in points if p.location.city.lower() == city.lower()]
+        if connector_type:
+            points = [p for p in points if p.connector_type.lower() == connector_type.lower()]
+        if min_power_kw is not None:
+            points = [p for p in points if p.power_kw >= min_power_kw]
+        if only_available:
+            points = [p for p in points if p.status == "FREE"]
+        return points
+
+    async def dashboard_charging_point(self, cp_id: str) -> ChargingPointDetail:
+        async with self._state_lock:
+            cp = self.charging_points.get(cp_id)
+        if not cp:
+            meta = get_metadata(cp_id)
+            if not meta:
+                raise KeyError(cp_id)
+            cp = ChargingPointDetail(
+                cp_id=cp_id,
+                name=meta.name,
+                status="OFFLINE",
+                power_kw=meta.power_kw,
+                connector_type=meta.connector_type,
+                location=Location(
+                    address=meta.address,
+                    city=meta.city,
+                    latitude=meta.latitude,
+                    longitude=meta.longitude,
+                    distance_km=None,
+                ),
+                queue_length=0,
+                estimated_wait_minutes=0,
+                favorite=cp_id in self.favorites,
+                amenities=meta.amenities,
+                price_eur_per_kwh=0.30 if meta.connector_type == "Type 2" else 0.42,
+                last_updated=utc_now(),
+            )
+        return cp
+
+    async def dashboard_current_session(self) -> Optional[SessionSummary]:
+        async with self._state_lock:
+            active = [
+                s for s in self.session_state.values()
+                if s.status in {"PENDING", "APPROVED", "CHARGING"}
+            ]
+        return active[0] if active else None
+
+    async def dashboard_session_history(self) -> List[SessionHistoryEntry]:
+        async with self._state_lock:
+            return list(self.session_history)
+
+    async def dashboard_notifications(self) -> List[Notification]:
+        async with self._state_lock:
+            return list(self.notifications)
+
+    async def dashboard_alerts(self) -> List[BroadcastAlert]:
+        async with self._state_lock:
+            return list(self.alerts)
+
+    async def dashboard_favorites(self) -> List[ChargingPointDetail]:
+        async with self._state_lock:
+            return [cp for cp in self.charging_points.values() if cp.cp_id in self.favorites]
+
+    async def dashboard_add_favorite(self, cp_id: str):
+        self.favorites.add(cp_id)
+
+    async def dashboard_remove_favorite(self, cp_id: str):
+        self.favorites.discard(cp_id)
+
+    async def dashboard_request_summary(self, request_id: str) -> SessionSummary:
+        async with self._state_lock:
+            summary = self.session_state.get(request_id)
+        if not summary:
+            raise KeyError(request_id)
+        return summary
+
+    async def dashboard_cancel_request(self, request_id: str) -> bool:
+        async with self._state_lock:
+            summary = self.session_state.get(request_id)
+            if not summary or summary.status not in {"PENDING", "APPROVED"}:
+                return False
+            cancelled = summary.model_copy(update={"status": "CANCELLED", "completed_at": utc_now()})
+            self.session_state[request_id] = cancelled
+            self.pending_requests.pop(request_id, None)
+            self.notifications.append(
+                Notification(
+                    notification_id=generate_id("note"),
+                    created_at=utc_now(),
+                    message=f"Request {request_id} cancelled.",
+                    type="SESSION",
+                    read=False,
+                )
+            )
+            self.session_history.append(SessionHistoryEntry(**cancelled.model_dump(), receipt_url=None))
+            return True
+
+    async def dashboard_stop_session(self, session_id: str) -> Optional[SessionSummary]:
+        async with self._state_lock:
+            for req_id, summary in self.session_state.items():
+                if summary.session_id == session_id:
+                    stopped = summary.model_copy(update={"status": "STOPPED", "completed_at": utc_now()})
+                    self.session_state[req_id] = stopped
+                    self.session_history.append(SessionHistoryEntry(**stopped.model_dump(), receipt_url=None))
+                    self.notifications.append(
+                        Notification(
+                            notification_id=generate_id("note"),
+                            created_at=utc_now(),
+                            message=f"Session {session_id} stopped by driver.",
+                            type="SESSION",
+                            read=False,
+                        )
+                    )
+                    return stopped
+        return None
 
 
 async def main():
@@ -222,24 +537,35 @@ async def main():
     # Initialize driver
     driver = EVDriver(config)
     
+    update_task: Optional[asyncio.Task] = None
+    dashboard_task: Optional[asyncio.Task] = None
+
     try:
         await driver.start()
-        
+
         # Start update listener
-        update_task = asyncio.create_task(driver.process_updates())
-        
-        # Run requests
+        update_task = asyncio.create_task(driver.process_updates(), name="driver-update-listener")
+
+        # Start dashboard HTTP server
+        dashboard_app = create_driver_dashboard_app(driver)
+        dashboard_config = Config(
+            dashboard_app,
+            host="0.0.0.0",
+            port=driver.dashboard_port,
+            log_level=log_level.lower(),
+        )
+        dashboard_server = Server(dashboard_config)
+        dashboard_task = asyncio.create_task(dashboard_server.serve(), name="driver-dashboard-server")
+
+        logger.info(f"Driver dashboard available at http://localhost:{driver.dashboard_port}")
+
+        driver._dashboard_task = dashboard_task
+
+        # Run scripted requests (if configured)
         await driver.run_requests()
-        
-        # Wait a bit for final updates
-        await asyncio.sleep(2)
-        
-        # Cancel update task
-        update_task.cancel()
-        try:
-            await update_task
-        except asyncio.CancelledError:
-            pass
+
+        # Keep service alive to serve dashboard / notifications
+        await asyncio.Future()
     
     except KeyboardInterrupt:
         logger.info("Shutting down...")
@@ -247,6 +573,14 @@ async def main():
         logger.error(f"Fatal error: {e}")
         raise
     finally:
+        for task in (update_task, dashboard_task):
+            if task and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
         await driver.stop()
 
 

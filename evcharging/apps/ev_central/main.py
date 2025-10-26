@@ -11,8 +11,9 @@ Responsibilities:
 import asyncio
 import argparse
 import sys
+from enum import Enum
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 
 from evcharging.common.config import CentralConfig, TOPICS
@@ -33,6 +34,10 @@ from evcharging.apps.ev_central.tcp_server import TCPControlServer
 class ChargingPoint:
     """Internal representation of a charging point."""
     
+    class MonitorStatus(str, Enum):
+        OK = "OK"
+        DOWN = "DOWN"
+
     def __init__(self, cp_id: str, cp_e_host: str = "", cp_e_port: int = 0):
         self.cp_id = cp_id
         self.state = CPState.DISCONNECTED
@@ -40,6 +45,7 @@ class ChargingPoint:
         self.current_session: str | None = None
         self.last_telemetry: CPTelemetry | None = None
         self.last_update: datetime = utc_now()
+        self.last_seen: datetime = utc_now()
         self.cp_e_host = cp_e_host
         self.cp_e_port = cp_e_port
         self.is_faulty = False  # Track fault state from monitor
@@ -50,6 +56,9 @@ class ChargingPoint:
             recovery_timeout=30,
             half_open_max_calls=2
         )
+        self.monitor_status: ChargingPoint.MonitorStatus = ChargingPoint.MonitorStatus.DOWN
+        self.monitor_last_seen: datetime | None = None
+        self.engine_status_known: bool = False
     
     def is_available(self) -> bool:
         """Check if CP is available for new charging session."""
@@ -58,6 +67,27 @@ class ChargingPoint:
             return False
         
         return can_supply(self.state) and self.current_driver is None and not self.is_faulty
+
+    def record_monitor_heartbeat(self):
+        """Record heartbeat received from monitor."""
+        self.monitor_last_seen = utc_now()
+        self.monitor_status = ChargingPoint.MonitorStatus.OK
+
+    def mark_monitor_down(self):
+        """Flag the monitor as disconnected."""
+        if self.monitor_status != ChargingPoint.MonitorStatus.DOWN:
+            logger.warning(f"Monitor for {self.cp_id} marked DOWN (no heartbeat)")
+        self.monitor_status = ChargingPoint.MonitorStatus.DOWN
+
+    def get_display_state(self) -> str:
+        """Calculate display state combining monitor and engine state."""
+        if self.monitor_status == ChargingPoint.MonitorStatus.DOWN:
+            return "DISCONNECTED"
+        if self.is_faulty:
+            return "BROKEN"
+        if self.engine_status_known and self.state in {CPState.FAULT, CPState.DISCONNECTED}:
+            return "BROKEN"
+        return "ON"
 
 
 class EVCentralController:
@@ -71,6 +101,7 @@ class EVCentralController:
         self.active_requests: Dict[str, DriverRequest] = {}
         self._running = False
         self.db = FaultHistoryDB()  # Initialize database
+        self.monitor_timeout = timedelta(seconds=5)
     
     async def start(self):
         """Initialize and start the central controller."""
@@ -130,6 +161,7 @@ class EVCentralController:
         # Set to ACTIVATED state
         self.charging_points[cp_id].state = CPState.ACTIVATED
         self.charging_points[cp_id].last_update = utc_now()
+        self.charging_points[cp_id].record_monitor_heartbeat()
         
         return True
     
@@ -144,6 +176,7 @@ class EVCentralController:
         cp.fault_reason = reason
         cp.fault_timestamp = utc_now()
         cp.circuit_breaker.call_failed()  # Record failure in circuit breaker
+        cp.record_monitor_heartbeat()
         
         # Record fault event in database
         self.db.record_fault_event(cp_id, "FAULT", reason)
@@ -152,10 +185,20 @@ class EVCentralController:
             f"(Circuit: {cp.circuit_breaker.get_state().value})"
         )
         
-        if cp.cp_e_host:
-            await cp.cp_e_host.handle_fault(reason)
+        # Send STOP_CP command to the engine via Kafka to enter safe state
+        if self.producer:
+            try:
+                command = CentralCommand(
+                    cmd=CommandType.STOP_CP,
+                    cp_id=cp_id,
+                    payload={"reason": reason}
+                )
+                await self.producer.send(TOPICS["CENTRAL_COMMANDS"], command, key=cp_id)
+                logger.info(f"Sent STOP_CP command to {cp_id} due to fault: {reason}")
+            except Exception as e:
+                logger.error(f"Failed to send STOP_CP command to {cp_id}: {e}")
         else:
-            logger.warning(f"CP {cp_id} has no attached engine — cannot send fault command")
+            logger.warning(f"CP {cp_id} marked as faulty but no Kafka producer available")
 
         # If CP has an active session, notify the driver
         if cp.current_driver:
@@ -170,6 +213,7 @@ class EVCentralController:
             cp.fault_reason = None
             cp.fault_timestamp = None
             cp.circuit_breaker.call_succeeded()  # Record success in circuit breaker
+            cp.record_monitor_heartbeat()
             
             # Record recovery event in database
             self.db.record_fault_event(cp_id, "RECOVERY", "Health check restored")
@@ -180,7 +224,17 @@ class EVCentralController:
             )
         else:
             logger.error(f"Cannot clear fault for unknown CP {cp_id}")
-    
+
+    def record_monitor_ping(self, cp_id: str):
+        """Record heartbeat from CP Monitor."""
+        if cp_id in self.charging_points:
+            cp = self.charging_points[cp_id]
+            cp.record_monitor_heartbeat()
+        else:
+            logger.info(f"Heartbeat from unknown CP monitor: {cp_id} - creating placeholder entry")
+            self.charging_points[cp_id] = ChargingPoint(cp_id)
+            self.charging_points[cp_id].record_monitor_heartbeat()
+
     async def handle_driver_request(self, request: DriverRequest):
         """Process a driver charging request."""
         logger.info(
@@ -253,19 +307,20 @@ class EVCentralController:
         except ValueError:
             logger.error(f"Invalid CP state '{status.state}' from {cp_id}")
             return
+        cp.engine_status_known = True
         cp.last_seen = utc_now()
+        cp.last_update = cp.last_seen
         
         # Record health snapshot to database
         self.db.record_health_snapshot(
             cp_id=cp_id,
-            state=status.state.value,
-            is_faulty=cp.is_faulty,
-            fault_reason=cp.fault_reason,
-            circuit_breaker_state=cp.circuit_breaker.get_state().value
+            is_healthy=not cp.is_faulty,
+            state=cp.state.value,
+            circuit_state=cp.circuit_breaker.get_state().value
         )
         
         logger.debug(
-            f"Status from {cp_id}: {status.state.value} (was {old_state.value})"
+            f"Status from {cp_id}: {cp.state.value} (was {old_state.value})"
         )
         
         # Handle state transitions
@@ -381,16 +436,21 @@ class EVCentralController:
     
     def get_dashboard_data(self) -> dict:
         """Get current state for dashboard display."""
+        self._refresh_monitor_states()
         return {
             "charging_points": [
                 {
                     "cp_id": cp.cp_id,
-                    "state": cp.state.value,
+                    "state": cp.get_display_state(),
+                    "engine_state": cp.state.value,
+                    "monitor_status": cp.monitor_status.value,
                     "current_driver": cp.current_driver,
                     "last_update": cp.last_update.isoformat(),
+                    "monitor_last_seen": cp.monitor_last_seen.isoformat() if cp.monitor_last_seen else None,
                     "telemetry": (
                         {
                             "kw": cp.last_telemetry.kw,
+                            "kwh": cp.last_telemetry.kwh,
                             "euros": cp.last_telemetry.euros,
                             "session_id": cp.last_telemetry.session_id,
                         }
@@ -402,6 +462,16 @@ class EVCentralController:
             ],
             "active_requests": len(self.active_requests),
         }
+
+    def _refresh_monitor_states(self):
+        """Mark monitors as down when heartbeat timeout is exceeded."""
+        now = utc_now()
+        for cp in self.charging_points.values():
+            if not cp.monitor_last_seen:
+                cp.mark_monitor_down()
+                continue
+            if now - cp.monitor_last_seen > self.monitor_timeout:
+                cp.mark_monitor_down()
 
 
 # Global controller instance for dashboard access

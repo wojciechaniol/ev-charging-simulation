@@ -59,29 +59,40 @@ class CPMonitor:
         max_retries = 5
         base_delay = 1
         
-        for attempt in range(1, max_retries+1):
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        f"{central_url}/cp/register",
-                        json=registration.model_dump(mode='json'),
-                        timeout=5.0
-                    )
-                    
-                    if response.status_code == 200:
-                        logger.info(f"CP {self.cp_id} registered with Central successfully")
-                        return
-                    else:
-                        logger.error(f"Failed to register CP: {response.status_code} {response.text}\
-                                     for the {attempt} time")
-            
-            except Exception as e:
-                logger.error(f"Error registering with Central: {e}")
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{central_url}/cp/register",
+                    json=registration.model_dump(mode='json'),
+                    timeout=5.0
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"CP {self.cp_id} registered with Central successfully")
+                else:
+                    logger.error(f"Failed to register CP: {response.status_code} {response.text}")
 
-            delay = min(base_delay * (2 ** (attempt - 1)), 60)
-            logger.info(f"Retrying registration in {delay:.1f}s...")
-            await asyncio.sleep(delay)
+        except Exception as e:
+            logger.error(f"Error registering with Central: {e}")
 
+    async def send_heartbeat(self):
+        """Send heartbeat to Central indicating monitor is alive."""
+        central_url = f"http://{self.config.central_host}:{self.config.central_port}"
+        heartbeat = {
+            "cp_id": self.cp_id,
+            "ts": utc_now().isoformat()
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{central_url}/cp/heartbeat",
+                    json=heartbeat,
+                    timeout=5.0
+                )
+        except Exception as e:
+            logger.debug(f"Heartbeat send failed for {self.cp_id}: {e}")
+    
     async def notify_central_fault(self):
         """Notify Central that this CP has a fault."""
         try:
@@ -142,6 +153,8 @@ class CPMonitor:
         
         while self._running:
             try:
+                await self.send_heartbeat()
+
                 # Skip health check if fault is manually simulated
                 if self.fault_simulated:
                     if self.is_healthy:
@@ -170,8 +183,9 @@ class CPMonitor:
                     
                     if response.startswith(b"OK"):
                         if not self.is_healthy:
-                            logger.info(f"CP {self.cp_id}: Health restored")
+                            logger.info(f"CP {self.cp_id}: Health restored - notifying Central")
                             self.is_healthy = True
+                            await self.notify_central_healthy()
                         consecutive_failures = 0
                         logger.debug(f"CP {self.cp_id}: Health check OK")
                     else:
@@ -183,8 +197,8 @@ class CPMonitor:
                         f"CP {self.cp_id}: Health check failed ({consecutive_failures}) - {type(e).__name__}"
                     )
                 
-                # Mark as unhealthy after 3 consecutive failures
-                if consecutive_failures >= 3 and self.is_healthy:
+                # Mark as unhealthy after 10 consecutive failures (increased for demo mode tolerance)
+                if consecutive_failures >= 10 and self.is_healthy:
                     logger.error(f"CP {self.cp_id}: FAULT DETECTED - marking as unhealthy")
                     self.is_healthy = False
                     await self.notify_central_fault()

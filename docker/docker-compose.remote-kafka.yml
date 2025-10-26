@@ -1,0 +1,153 @@
+# EV Charging Simulation - Using Remote Kafka
+# Use this configuration when Kafka is already running elsewhere
+version: '3.8'
+
+services:
+  # EV Central Controller
+  ev-central:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.central
+    container_name: ev-central
+    ports:
+      - "8000:8000"  # HTTP Dashboard
+      - "9999:9999"  # TCP Control
+    environment:
+      # Change this to your remote Kafka address
+      CENTRAL_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CENTRAL_HTTP_PORT: 8000
+      CENTRAL_LISTEN_PORT: 9999
+      CENTRAL_LOG_LEVEL: INFO
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Engine 1
+  ev-cp-e-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-1
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CP_ENGINE_CP_ID: CP-001
+      CP_ENGINE_HEALTH_PORT: 8001
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 22.0
+      CP_ENGINE_EURO_RATE: 0.30
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Engine 2
+  ev-cp-e-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-2
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CP_ENGINE_CP_ID: CP-002
+      CP_ENGINE_HEALTH_PORT: 8001
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 50.0
+      CP_ENGINE_EURO_RATE: 0.35
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Monitor 1
+  ev-cp-m-1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-1
+    environment:
+      CP_MONITOR_CP_ID: CP-001
+      CP_MONITOR_CP_E_HOST: ev-cp-e-1
+      CP_MONITOR_CP_E_PORT: 8001
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
+      CP_MONITOR_HEALTH_INTERVAL: 1.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    # depends_on removed for remote deployment flexibility
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Monitor 2
+  ev-cp-m-2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-2
+    environment:
+      CP_MONITOR_CP_ID: CP-002
+      CP_MONITOR_CP_E_HOST: ev-cp-e-2
+      CP_MONITOR_CP_E_PORT: 8001
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
+      CP_MONITOR_HEALTH_INTERVAL: 1.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    # depends_on removed for remote deployment flexibility
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Engine 3
+  ev-cp-e-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_e
+    container_name: ev-cp-e-3
+    environment:
+      CP_ENGINE_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      CP_ENGINE_CP_ID: CP-003
+      CP_ENGINE_HEALTH_PORT: 8001
+      CP_ENGINE_LOG_LEVEL: INFO
+      CP_ENGINE_KW_RATE: 11.0
+      CP_ENGINE_EURO_RATE: 0.29
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # Charging Point Monitor 3
+  ev-cp-m-3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.cp_m
+    container_name: ev-cp-m-3
+    environment:
+      CP_MONITOR_CP_ID: CP-003
+      CP_MONITOR_CP_E_HOST: ev-cp-e-3
+      CP_MONITOR_CP_E_PORT: 8001
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
+      CP_MONITOR_HEALTH_INTERVAL: 1.0
+      CP_MONITOR_LOG_LEVEL: INFO
+    # depends_on removed for remote deployment flexibility
+    networks:
+      - evcharging-network
+    restart: unless-stopped
+
+  # EV Driver Client
+  ev-driver:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.driver
+    container_name: ev-driver
+    environment:
+      DRIVER_DRIVER_ID: driver-alice
+      DRIVER_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+      DRIVER_REQUEST_INTERVAL: 4.0
+      DRIVER_LOG_LEVEL: INFO
+      DRIVER_CENTRAL_HTTP_URL: ${CENTRAL_HTTP_URL:-http://ev-central:8000}
+    volumes:
+      - ../requests.txt:/app/requests.txt:ro
+    # depends_on removed for remote deployment flexibility
+    networks:
+      - evcharging-network
+
+networks:
+  evcharging-network:
+    driver: bridge
