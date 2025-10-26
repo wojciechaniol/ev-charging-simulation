@@ -70,9 +70,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 1.0
       CP_MONITOR_LOG_LEVEL: INFO
-    depends_on:
-      - ev-central
-      - ev-cp-e-1
+    # depends_on removed for remote deployment flexibility
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -91,9 +89,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 1.0
       CP_MONITOR_LOG_LEVEL: INFO
-    depends_on:
-      - ev-central
-      - ev-cp-e-2
+    # depends_on removed for remote deployment flexibility
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -125,13 +121,11 @@ services:
       CP_MONITOR_CP_ID: CP-003
       CP_MONITOR_CP_E_HOST: ev-cp-e-3
       CP_MONITOR_CP_E_PORT: 8001
-      CP_MONITOR_CENTRAL_HOST: ev-central
-      CP_MONITOR_CENTRAL_PORT: 8000
+      CP_MONITOR_CENTRAL_HOST: ${CENTRAL_HOST:-ev-central}
+      CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 1.0
       CP_MONITOR_LOG_LEVEL: INFO
-    depends_on:
-      - ev-central
-      - ev-cp-e-3
+    # depends_on removed for remote deployment flexibility
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -150,8 +144,7 @@ services:
       DRIVER_CENTRAL_HTTP_URL: ${CENTRAL_HTTP_URL:-http://ev-central:8000}
     volumes:
       - ../requests.txt:/app/requests.txt:ro
-    depends_on:
-      - ev-central
+    # depends_on removed for remote deployment flexibility
     networks:
       - evcharging-network
 
