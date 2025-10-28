@@ -15,11 +15,11 @@ if (-not $env:KAFKA_BOOTSTRAP) {
     Write-Host ""
     Write-Host "Please run:" -ForegroundColor Yellow
     Write-Host '  $env:KAFKA_BOOTSTRAP = "<personal-machine-ip>:9092"'
-    Write-Host '  $env:CENTRAL_HTTP_URL = "http://<personal-machine-ip>:8050"'
+    Write-Host '  $env:CENTRAL_HTTP_URL = "http://<personal-machine-ip>:8000"'
     Write-Host ""
     Write-Host "Example:" -ForegroundColor Cyan
     Write-Host '  $env:KAFKA_BOOTSTRAP = "192.168.1.100:9092"'
-    Write-Host '  $env:CENTRAL_HTTP_URL = "http://192.168.1.100:8050"'
+    Write-Host '  $env:CENTRAL_HTTP_URL = "http://192.168.1.100:8000"'
     exit 1
 }
 
@@ -27,7 +27,7 @@ if (-not $env:CENTRAL_HTTP_URL) {
     Write-Host "❌ ERROR: CENTRAL_HTTP_URL is not set" -ForegroundColor Red
     Write-Host ""
     Write-Host "Please run:" -ForegroundColor Yellow
-    Write-Host '  $env:CENTRAL_HTTP_URL = "http://<personal-machine-ip>:8050"'
+    Write-Host '  $env:CENTRAL_HTTP_URL = "http://<personal-machine-ip>:8000"'
     exit 1
 }
 

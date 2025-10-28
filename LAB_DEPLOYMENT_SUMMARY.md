@@ -2,6 +2,9 @@
 
 Bu kılavuz, EV Charging Simulation sistemini laboratuvardaki 3 farklı Windows bilgisayara (okul kablolu ağı üzerinden) nasıl dağıtacağınızı adım adım gösterir.
 
+> **💡 Not:** Tek bilgisayarda test etmek için **[QUICKSTART.md](QUICKSTART.md)** dosyasına bakın.  
+> Bu kılavuz sadece **lab ortamı (3 Windows bilgisayar)** için geçerlidir.
+
 ---
 
 ## 📊 Sistem Yapısı
@@ -677,7 +680,7 @@ docker restart ev-cp-e-001 ev-cp-m-001
 Start-Sleep -Seconds 10
 
 # Dashboard'dan tekrar kontrol et (Makine 1 IP'sini kullan)
-Invoke-WebRequest -Uri "http://192.168.1.105:8050/cp" | ConvertFrom-Json | Select-Object -ExpandProperty charging_points | Where-Object { $_.cp_id -eq "CP-001" }
+Invoke-WebRequest -Uri "http://192.168.1.105:8000/cp" | ConvertFrom-Json | Select-Object -ExpandProperty charging_points | Where-Object { $_.cp_id -eq "CP-001" }
 ```
 
 ---
@@ -771,6 +774,7 @@ Invoke-WebRequest -Uri "http://localhost:8100/drivers/driver-alice/requests" `
 - Öğrenciler kendi laptop'larında **tek makine** deployment yapabilir
 - `docker compose up -d` ile tüm sistem local'de çalışır
 - 3 makine senaryosu laboratuvar ortamı için özel
+- **Detaylar için:** [QUICKSTART.md](QUICKSTART.md) dosyasına bakın
 
 ---
 
@@ -815,7 +819,7 @@ docker compose up -d ev-central
 ```powershell
 $env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"
 $env:CENTRAL_HOST = "192.168.1.105"
-$env:CENTRAL_PORT = "8050"
+$env:CENTRAL_PORT = "8000"
 
 # Script ile (önerilir - otomatik bağlantı testi dahil)
 .\deploy-lab-cp.ps1
@@ -829,7 +833,7 @@ docker compose -f docker/docker-compose.remote-kafka.yml up -d `
 ### Makine 3 (Drivers) - Windows PowerShell:
 ```powershell
 $env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"
-$env:CENTRAL_HTTP_URL = "http://192.168.1.105:8050"
+$env:CENTRAL_HTTP_URL = "http://192.168.1.105:8000"
 
 # Script ile (önerilir - otomatik bağlantı testi dahil)
 .\deploy-lab-driver.ps1
@@ -857,7 +861,7 @@ Bu script'ler:
 ### Windows Defender Firewall:
 Lab ortamında Windows Defender Firewall özellikle aşağıdaki portları engelleyebilir:
 - **9092** (Kafka)
-- **8050** (Central Dashboard)
+- **8000** (Central Dashboard)
 - **9999** (Central TCP Server)
 
 **Çözüm:** Gerekli portlar için inbound rules eklenmeli (yukarıda detaylandırılmıştır).

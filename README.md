@@ -10,18 +10,30 @@ A distributed, event-driven electric vehicle charging management system demonstr
 
 **This system is designed for fully autonomous operation with ZERO user interaction required.**
 
-### ⚡ Quick Start (One Command)
+### ⚡ Quick Start
 
+**Option 1: Local Testing (Single Computer)** - Recommended for development/testing
 ```bash
 docker compose up -d
 ```
 
+**Option 2: Lab Deployment (3 Windows Computers)** - For classroom demonstrations
+```powershell
+# See LAB_DEPLOYMENT_SUMMARY.md for detailed instructions
+```
+
 That's it! The entire system will:
-- ✅ Start **26 services** automatically (1 Kafka, 1 Central, 10 CPs, 10 Monitors, 5 Drivers)
+- ✅ Start **17 services** automatically (1 Kafka, 1 Central, 5 CPs, 5 Monitors, 5 Drivers)
 - ✅ Initialize and connect without intervention
 - ✅ Begin autonomous charging operations
 - ✅ Demonstrate all functionality through observable terminal outputs
 - ✅ Run continuously and handle all scenarios (success, failures, recovery)
+
+### 📚 Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - Fast local setup for single computer (Windows/macOS/Linux)
+- **[LAB_DEPLOYMENT_SUMMARY.md](LAB_DEPLOYMENT_SUMMARY.md)** - Complete guide for 3 Windows lab computers
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive deployment options
 
 ### 📊 Observe the System
 

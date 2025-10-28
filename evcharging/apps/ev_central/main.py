@@ -231,9 +231,15 @@ class EVCentralController:
             cp = self.charging_points[cp_id]
             cp.record_monitor_heartbeat()
         else:
-            logger.info(f"Heartbeat from unknown CP monitor: {cp_id} - creating placeholder entry")
-            self.charging_points[cp_id] = ChargingPoint(cp_id)
-            self.charging_points[cp_id].record_monitor_heartbeat()
+            logger.warning(f"Heartbeat from unregistered CP monitor: {cp_id} - creating and activating placeholder entry")
+            # Create placeholder and immediately activate it since monitor is alive
+            cp = ChargingPoint(cp_id)
+            cp.state = CPState.ACTIVATED  # Set to ACTIVATED instead of DISCONNECTED
+            cp.record_monitor_heartbeat()
+            self.charging_points[cp_id] = cp
+            
+            # Log the auto-registration
+            logger.info(f"CP {cp_id} auto-registered via monitor heartbeat - state: ACTIVATED")
 
     async def handle_driver_request(self, request: DriverRequest):
         """Process a driver charging request."""
