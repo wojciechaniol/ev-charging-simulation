@@ -1,6 +1,9 @@
 #!/bin/bash
+# ⚠️ DEPRECATED: This script is for Linux/macOS only
+# For Windows lab deployment, use: deploy-lab-cp.ps1
+#
 # Quick deployment script for Lab Machine (CP Engines + Monitors)
-# Run this on Machine 2 (CP1)
+# Run this on Machine 2 (CP1) - Linux/macOS only
 
 set -e
 
@@ -71,43 +74,55 @@ fi
 echo ""
 
 # Start CP services
-echo "1️⃣  Starting Charging Point Engines and Monitors..."
+echo "1️⃣  Starting 5 Charging Point Engines and 5 Monitors (10 services)..."
 docker compose -f docker/docker-compose.remote-kafka.yml up -d \
-  ev-cp-e-1 ev-cp-e-2 ev-cp-m-1 ev-cp-m-2
+  ev-cp-e-1 ev-cp-e-2 ev-cp-e-3 ev-cp-e-4 ev-cp-e-5 \
+  ev-cp-m-1 ev-cp-m-2 ev-cp-m-3 ev-cp-m-4 ev-cp-m-5
 
-echo "   ⏳ Waiting for services to start (10 seconds)..."
-sleep 10
+echo "   ⏳ Waiting for services to start (15 seconds)..."
+sleep 15
 echo ""
 
 # Check services
 echo "2️⃣  Checking service status..."
-docker compose ps --filter "name=ev-cp"
+docker compose -f docker/docker-compose.remote-kafka.yml ps --filter "name=ev-cp"
+echo ""
+echo "   Total CP services running:"
+docker ps --filter "name=ev-cp" --format "{{.Names}}" | wc -l | xargs echo "   Count:"
 echo ""
 
 # Verify logs
-echo "3️⃣  Verifying connections..."
+echo "3️⃣  Verifying connections (sample from CP-001 and CP-003)..."
 echo ""
 echo "   📋 CP-001 Engine logs:"
-docker logs ev-cp-e-1 2>&1 | grep -E "Kafka|ACTIVATED|started successfully" | tail -5
+docker logs ev-cp-e-1 2>&1 | grep -E "Kafka|ACTIVATED|started successfully" | tail -3
 echo ""
 echo "   📋 CP-001 Monitor logs:"
-docker logs ev-cp-m-1 2>&1 | grep -E "Monitoring|heartbeat|Health check" | tail -5
+docker logs ev-cp-m-1 2>&1 | grep -E "Monitoring|heartbeat|Health check" | tail -3
+echo ""
+echo "   📋 CP-003 Engine logs:"
+docker logs ev-cp-e-3 2>&1 | grep -E "Kafka|ACTIVATED|started successfully" | tail -3
 echo ""
 
 echo "=========================================="
 echo "✅ Lab CP Setup Complete!"
 echo "=========================================="
 echo ""
-echo "📊 Running Services:"
-echo "   - ev-cp-e-1 (CP-001 Engine)"
-echo "   - ev-cp-e-2 (CP-002 Engine)"
-echo "   - ev-cp-m-1 (CP-001 Monitor)"
-echo "   - ev-cp-m-2 (CP-002 Monitor)"
+echo "📊 Running Services (10 total):"
+echo "   Engines: ev-cp-e-1, ev-cp-e-2, ev-cp-e-3, ev-cp-e-4, ev-cp-e-5"
+echo "   Monitors: ev-cp-m-1, ev-cp-m-2, ev-cp-m-3, ev-cp-m-4, ev-cp-m-5"
+echo ""
+echo "⚡ Power Ratings:"
+echo "   CP-001: 22.0 kW  (€0.30/kWh)"
+echo "   CP-002: 50.0 kW  (€0.35/kWh)"
+echo "   CP-003: 43.0 kW  (€0.32/kWh)"
+echo "   CP-004: 150.0 kW (€0.40/kWh)"
+echo "   CP-005: 7.2 kW   (€0.28/kWh)"
 echo ""
 echo "🔍 Monitor logs:"
 echo "   docker logs -f ev-cp-e-1"
 echo "   docker logs -f ev-cp-m-1"
 echo ""
-echo "🛑 To stop services:"
+echo "🛑 To stop all services:"
 echo "   docker compose -f docker/docker-compose.remote-kafka.yml down"
 echo ""

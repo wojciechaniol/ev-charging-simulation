@@ -431,20 +431,31 @@ export KAFKA_BOOTSTRAP=kafka.example.com:9092
 docker compose -f docker/docker-compose.remote-kafka.yml up -d
 ```
 
-#### 3. Lab Machine Deployment (Distributed)
+#### 3. Lab Machine Deployment (Distributed - 3 Machines)
 
-Deploy components across multiple machines:
+Deploy components across 3 machines for realistic testing:
 
-**Machine A** (Kafka + Central):
+**Machine 1** (Kafka + Central):
 ```bash
+export KAFKA_ADVERTISED_HOST=192.168.1.105  # Your IP
 docker compose up -d kafka ev-central
 ```
 
-**Machine B** (Charging Points):
+**Machine 2** (5 Charging Points + Monitors):
 ```bash
-export KAFKA_BOOTSTRAP=<machine-a-ip>:9092
-docker compose up -d ev-cp-e-1 ev-cp-e-2 ev-cp-m-1 ev-cp-m-2
+export KAFKA_BOOTSTRAP=192.168.1.105:9092
+export CENTRAL_HOST=192.168.1.105
+./deploy-lab-cp.sh  # Starts 10 services
 ```
+
+**Machine 3** (5 Drivers):
+```bash
+export KAFKA_BOOTSTRAP=192.168.1.105:9092
+export CENTRAL_HTTP_URL=http://192.168.1.105:8000
+./deploy-lab-driver.sh  # Starts 5 driver clients
+```
+
+**Total: 17 services across 3 machines** - See [LAB_DEPLOYMENT_SUMMARY.md](LAB_DEPLOYMENT_SUMMARY.md) for complete guide.
 
 #### 4. Interactive Deployment
 
@@ -473,8 +484,7 @@ This checks:
 
 - **[QUICKSTART.md](QUICKSTART.md)** - Get running in 5 minutes
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive 50+ page guide
-- **[LAB_DEPLOYMENT_READY.md](LAB_DEPLOYMENT_READY.md)** - Lab deployment scenarios
-- **[DEPLOYMENT_SUMMARY.md](DEPLOYMENT_SUMMARY.md)** - Architecture and patterns
+- **[LAB_DEPLOYMENT_SUMMARY.md](LAB_DEPLOYMENT_SUMMARY.md)** - 🎓 **3-Machine Lab Deployment (Windows/Linux/macOS)** - Cross-platform setup with 17 services
 
 ### 📚 Fault Tolerance Documentation
 

@@ -1,6 +1,9 @@
 #!/bin/bash
+# ⚠️ DEPRECATED: This script is for Linux/macOS only
+# For Windows lab deployment, use: deploy-lab-driver.ps1
+#
 # Quick deployment script for Lab Machine (Driver)
-# Run this on Machine 3 (CP2)
+# Run this on Machine 3 (CP2) - Linux/macOS only
 
 set -e
 
@@ -61,39 +64,58 @@ else
 fi
 echo ""
 
-# Start Driver service
-echo "1️⃣  Starting Driver Service..."
-docker compose -f docker/docker-compose.remote-kafka.yml up -d ev-driver
+# Start Driver services
+echo "1️⃣  Starting 5 Driver Services (Alice, Bob, Charlie, David, Eve)..."
+docker compose -f docker/docker-compose.remote-kafka.yml up -d \
+  ev-driver-alice ev-driver-bob ev-driver-charlie ev-driver-david ev-driver-eve
 
-echo "   ⏳ Waiting for driver to start (10 seconds)..."
-sleep 10
+echo "   ⏳ Waiting for drivers to start (15 seconds)..."
+sleep 15
 echo ""
 
-# Check service
+# Check services
 echo "2️⃣  Checking service status..."
-docker compose ps --filter "name=ev-driver"
+docker compose -f docker/docker-compose.remote-kafka.yml ps --filter "name=ev-driver"
+echo ""
+echo "   Total Driver services running:"
+docker ps --filter "name=ev-driver" --format "{{.Names}}" | wc -l | xargs echo "   Count:"
 echo ""
 
 # Verify logs
-echo "3️⃣  Verifying connection..."
+echo "3️⃣  Verifying connections (sample from Alice and Bob)..."
 echo ""
-echo "   📋 Driver logs:"
-docker logs ev-driver 2>&1 | grep -E "Starting|Kafka|started successfully|requested charging" | tail -10
+echo "   📋 Driver Alice logs:"
+docker logs ev-driver-alice 2>&1 | grep -E "Starting|Kafka|started successfully|requested charging" | tail -5
+echo ""
+echo "   📋 Driver Bob logs:"
+docker logs ev-driver-bob 2>&1 | grep -E "Starting|Kafka|started successfully|requested charging" | tail -5
 echo ""
 
 echo "=========================================="
 echo "✅ Lab Driver Setup Complete!"
 echo "=========================================="
 echo ""
-echo "📊 Running Service:"
-echo "   - ev-driver (driver-alice)"
+echo "📊 Running Services (5 total):"
+echo "   - ev-driver-alice  (Port 8100, 5.0s interval)"
+echo "   - ev-driver-bob    (Port 8101, 6.0s interval)"
+echo "   - ev-driver-charlie(Port 8102, 7.0s interval)"
+echo "   - ev-driver-david  (Port 8103, 8.0s interval)"
+echo "   - ev-driver-eve    (Port 8104, 4.5s interval)"
 echo ""
 echo "🔍 Monitor logs:"
-echo "   docker logs -f ev-driver"
+echo "   docker logs -f ev-driver-alice"
+echo "   docker logs -f ev-driver-bob"
+echo ""
+echo "🌐 Access Dashboards:"
+echo "   Alice:   http://localhost:8100"
+echo "   Bob:     http://localhost:8101"
+echo "   Charlie: http://localhost:8102"
+echo "   David:   http://localhost:8103"
+echo "   Eve:     http://localhost:8104"
 echo ""
 echo "📡 Check available charging points:"
 echo "   curl $CENTRAL_HTTP_URL/cp | jq '.charging_points[] | {cp_id, state, engine_state}'"
 echo ""
-echo "🛑 To stop service:"
+echo "🛑 To stop all services:"
 echo "   docker compose -f docker/docker-compose.remote-kafka.yml down"
 echo ""
