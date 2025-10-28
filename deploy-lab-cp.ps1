@@ -16,12 +16,12 @@ if (-not $env:KAFKA_BOOTSTRAP) {
     Write-Host "Please run:" -ForegroundColor Yellow
     Write-Host '  $env:KAFKA_BOOTSTRAP = "<personal-machine-ip>:9092"'
     Write-Host '  $env:CENTRAL_HOST = "<personal-machine-ip>"'
-    Write-Host '  $env:CENTRAL_PORT = "8050"'
+    Write-Host '  $env:CENTRAL_PORT = "8000"'
     Write-Host ""
     Write-Host "Example:" -ForegroundColor Cyan
     Write-Host '  $env:KAFKA_BOOTSTRAP = "192.168.1.100:9092"'
     Write-Host '  $env:CENTRAL_HOST = "192.168.1.100"'
-    Write-Host '  $env:CENTRAL_PORT = "8050"'
+    Write-Host '  $env:CENTRAL_PORT = "8000"'
     exit 1
 }
 
@@ -36,7 +36,7 @@ if (-not $env:CENTRAL_HOST) {
 Write-Host "🔧 Environment configured:" -ForegroundColor Green
 Write-Host "   KAFKA_BOOTSTRAP=$env:KAFKA_BOOTSTRAP"
 Write-Host "   CENTRAL_HOST=$env:CENTRAL_HOST"
-Write-Host "   CENTRAL_PORT=$($env:CENTRAL_PORT ?? '8050')"
+Write-Host "   CENTRAL_PORT=$($env:CENTRAL_PORT ?? '8000')"
 Write-Host ""
 
 # Test connectivity
@@ -61,7 +61,7 @@ if ($kafkaTest.TcpTestSucceeded) {
 
 # Test Central
 Write-Host "   Testing Central connection..."
-$centralPort = if ($env:CENTRAL_PORT) { $env:CENTRAL_PORT } else { "8050" }
+$centralPort = if ($env:CENTRAL_PORT) { $env:CENTRAL_PORT } else { "8000" }
 $centralTest = Test-NetConnection -ComputerName $env:CENTRAL_HOST -Port $centralPort -WarningAction SilentlyContinue
 
 if ($centralTest.TcpTestSucceeded) {
