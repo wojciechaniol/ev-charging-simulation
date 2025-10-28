@@ -1,0 +1,35 @@
+# EV Charging Simulation - Python Dependencies
+# For Python 3.11+
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Kafka Client
+kafka-python==2.0.2
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+
+# Async Support
+asyncio==3.4.3
+aiofiles==23.2.1
+
+# Logging & Monitoring
+python-json-logger==2.0.7
+colorlog==6.8.0
+
+# Data Handling
+python-dateutil==2.8.2
+
+# Development/Testing (optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+
+# Type Checking (optional)
+mypy==1.7.1
+types-requests==2.31.0.10
