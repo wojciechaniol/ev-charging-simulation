@@ -9,6 +9,7 @@ pydantic-settings==2.1.0
 
 # Kafka Client
 kafka-python==2.0.2
+aiokafka==0.11.0
 
 # HTTP Client
 httpx==0.25.2
@@ -21,6 +22,7 @@ aiofiles==23.2.1
 # Logging & Monitoring
 python-json-logger==2.0.7
 colorlog==6.8.0
+loguru==0.7.2
 
 # Data Handling
 python-dateutil==2.8.2

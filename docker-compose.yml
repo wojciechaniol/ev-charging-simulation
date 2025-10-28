@@ -74,6 +74,7 @@ services:
       - "8000:8000"  # HTTP Dashboard
       - "9999:9999"  # TCP Control
     environment:
+      SERVICE_TYPE: central
       CENTRAL_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
       CENTRAL_HTTP_PORT: 8000
       CENTRAL_LISTEN_PORT: 9999

@@ -18,13 +18,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy wait-for-kafka script
 COPY wait-for-kafka.sh /usr/local/bin/wait-for-kafka.sh
-RUN chmod +x /usr/local/bin/wait-for-kafka.sh
+# Fix Windows line endings and make executable
+RUN sed -i 's/\r$//' /usr/local/bin/wait-for-kafka.sh && \
+    chmod +x /usr/local/bin/wait-for-kafka.sh
 
 # Copy application code
 COPY evcharging /app/evcharging
 
 # Set Python path
 ENV PYTHONPATH=/app
+ENV SERVICE_TYPE=driver
 
 # Run Driver client with Kafka wait
-CMD ["wait-for-kafka.sh", "kafka:9092", "python", "-m", "evcharging.apps.ev_driver.main", "--requests-file", "/app/requests.txt"]
+CMD ["/usr/local/bin/wait-for-kafka.sh"]

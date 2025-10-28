@@ -4,7 +4,8 @@
 
 set -e
 
-KAFKA_HOST="${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}"
+# Get Kafka host from environment or use default
+KAFKA_HOST="${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
 MAX_ATTEMPTS=60
 ATTEMPT=0
 
@@ -19,17 +20,45 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     # Try to connect to Kafka
     if nc -z "$HOST" "$PORT" 2>/dev/null; then
         echo "✅ Kafka is accepting connections at $KAFKA_HOST"
+        echo "✅ Starting application..."
         
-        # Additional check: Try to list topics (requires kafka-topics.sh in PATH)
-        if command -v kafka-topics.sh &> /dev/null; then
-            if kafka-topics.sh --bootstrap-server "$KAFKA_HOST" --list &> /dev/null; then
-                echo "✅ Kafka broker is fully operational"
-                exit 0
+        # Start the actual application passed as arguments
+        # If no arguments, start the service based on SERVICE_TYPE env var or container name
+        if [ $# -eq 0 ]; then
+            # First check SERVICE_TYPE environment variable
+            if [ -n "$SERVICE_TYPE" ]; then
+                case "$SERVICE_TYPE" in
+                    "central")
+                        exec python -m evcharging.apps.ev_central.main
+                        ;;
+                    "cp-engine"|"cp-e")
+                        exec python -m evcharging.apps.ev_cp_e.main
+                        ;;
+                    "cp-monitor"|"cp-m")
+                        exec python -m evcharging.apps.ev_cp_m.main
+                        ;;
+                    "driver")
+                        exec python -m evcharging.apps.ev_driver.main
+                        ;;
+                    *)
+                        echo "❌ ERROR: Unknown SERVICE_TYPE: $SERVICE_TYPE"
+                        exit 1
+                        ;;
+                esac
+            # Fallback: Auto-detect based on HOSTNAME or container name
+            elif [[ "$HOSTNAME" == *"cp-m"* ]] || [[ "$CONTAINER_NAME" == *"cp-m"* ]]; then
+                exec python -m evcharging.apps.ev_cp_m.main
+            elif [[ "$HOSTNAME" == *"cp-e"* ]] || [[ "$CONTAINER_NAME" == *"cp-e"* ]]; then
+                exec python -m evcharging.apps.ev_cp_e.main
+            elif [[ "$HOSTNAME" == *"driver"* ]] || [[ "$CONTAINER_NAME" == *"driver"* ]]; then
+                exec python -m evcharging.apps.ev_driver.main
+            else
+                # Default to central
+                exec python -m evcharging.apps.ev_central.main
             fi
         else
-            # If kafka-topics.sh not available, just rely on TCP connection
-            echo "✅ Kafka TCP connection successful (broker validation skipped)"
-            exit 0
+            # Execute the command passed as arguments
+            exec "$@"
         fi
     fi
     

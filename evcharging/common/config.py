@@ -13,7 +13,7 @@ class CentralConfig(BaseSettings):
     
     listen_port: int = Field(default=9999, description="TCP control plane port")
     http_port: int = Field(default=8000, description="HTTP dashboard port")
-    kafka_bootstrap: str = Field(default="localhost:9092", description="Kafka bootstrap servers")
+    kafka_bootstrap: str = Field(default="kafka:9092", description="Kafka bootstrap servers")
     db_url: Optional[str] = Field(default=None, description="Database URL (optional)")
     log_level: str = Field(default="INFO", description="Logging level")
     
@@ -28,7 +28,7 @@ class CentralConfig(BaseSettings):
 class CPEngineConfig(BaseSettings):
     """Configuration for CP Engine service."""
     
-    kafka_bootstrap: str = Field(default="localhost:9092", description="Kafka bootstrap servers")
+    kafka_bootstrap: str = Field(default="kafka:9092", description="Kafka bootstrap servers")
     cp_id: str = Field(..., description="Charging Point ID")
     health_port: int = Field(default=8001, description="TCP health check port")
     log_level: str = Field(default="INFO", description="Logging level")
@@ -67,7 +67,7 @@ class DriverConfig(BaseSettings):
     """Configuration for Driver client."""
     
     driver_id: str = Field(..., description="Driver identifier")
-    kafka_bootstrap: str = Field(default="localhost:9092", description="Kafka bootstrap servers")
+    kafka_bootstrap: str = Field(default="kafka:9092", description="Kafka bootstrap servers")
     requests_file: Optional[str] = Field(default=None, description="File with CP IDs to request")
     request_interval: float = Field(default=4.0, description="Interval between requests (seconds)")
     log_level: str = Field(default="INFO", description="Logging level")
