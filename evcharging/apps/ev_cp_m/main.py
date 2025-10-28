@@ -48,7 +48,7 @@ class CPMonitor:
         self._running = False
     
     async def register_with_central(self):
-        """Register or authenticate CP with Central."""
+        """Register or authenticate CP with Central with retry logic."""
         registration = CPRegistration(
             cp_id=self.cp_id,
             cp_e_host=self.config.cp_e_host,
@@ -57,21 +57,35 @@ class CPMonitor:
         
         central_url = f"http://{self.config.central_host}:{self.config.central_port}"
         
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{central_url}/cp/register",
-                    json=registration.model_dump(mode='json'),
-                    timeout=5.0
-                )
-                
-                if response.status_code == 200:
-                    logger.info(f"CP {self.cp_id} registered with Central successfully")
-                else:
-                    logger.error(f"Failed to register CP: {response.status_code} {response.text}")
+        max_retries = 10
+        retry_delay = 2.0  # Start with 2 seconds
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        f"{central_url}/cp/register",
+                        json=registration.model_dump(mode='json'),
+                        timeout=5.0
+                    )
+                    
+                    if response.status_code == 200:
+                        logger.info(f"CP {self.cp_id} registered with Central successfully (attempt {attempt})")
+                        return  # Success - exit retry loop
+                    else:
+                        logger.warning(f"Failed to register CP (attempt {attempt}/{max_retries}): {response.status_code} {response.text}")
 
-        except Exception as e:
-            logger.error(f"Error registering with Central: {e}")
+            except Exception as e:
+                logger.warning(f"Error registering with Central (attempt {attempt}/{max_retries}): {e}")
+            
+            # If not last attempt, wait before retrying
+            if attempt < max_retries:
+                logger.debug(f"Retrying registration in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+                # Exponential backoff with max 10 seconds
+                retry_delay = min(retry_delay * 1.5, 10.0)
+            else:
+                logger.error(f"Failed to register CP {self.cp_id} after {max_retries} attempts - will retry via heartbeat")
 
     async def send_heartbeat(self):
         """Send heartbeat to Central indicating monitor is alive."""
