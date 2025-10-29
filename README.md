@@ -31,6 +31,7 @@ That's it! The entire system will:
 
 ### 📚 Documentation
 
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - 📄 **Quick reference card for lab deployments (print this!)**
 - **[QUICKSTART.md](QUICKSTART.md)** - Fast local setup for single computer (Windows/macOS/Linux)
 - **[LAB_DEPLOYMENT_SUMMARY.md](LAB_DEPLOYMENT_SUMMARY.md)** - Complete guide for 3 Windows lab computers
 - **[WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md)** - 🪟 **Windows PowerShell scripts and 3-window lab guide**
