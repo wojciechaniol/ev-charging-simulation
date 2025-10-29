@@ -146,6 +146,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 2.0
       CP_MONITOR_LOG_LEVEL: INFO
+      CP_MONITOR_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -163,6 +164,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 2.0
       CP_MONITOR_LOG_LEVEL: INFO
+      CP_MONITOR_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -180,6 +182,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 2.0
       CP_MONITOR_LOG_LEVEL: INFO
+      CP_MONITOR_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -197,6 +200,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 2.0
       CP_MONITOR_LOG_LEVEL: INFO
+      CP_MONITOR_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
     networks:
       - evcharging-network
     restart: unless-stopped
@@ -214,6 +218,7 @@ services:
       CP_MONITOR_CENTRAL_PORT: ${CENTRAL_PORT:-8000}
       CP_MONITOR_HEALTH_INTERVAL: 2.0
       CP_MONITOR_LOG_LEVEL: INFO
+      CP_MONITOR_KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP}
     networks:
       - evcharging-network
     restart: unless-stopped

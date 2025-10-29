@@ -5,20 +5,21 @@
 set -e
 
 # Get Kafka host from environment or use default
-KAFKA_HOST="${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}"
+KAFKA_HOST="${KAFKA_BOOTSTRAP:-${CP_ENGINE_KAFKA_BOOTSTRAP:-${CP_MONITOR_KAFKA_BOOTSTRAP:-kafka:9092}}}"
 MAX_ATTEMPTS=60
 ATTEMPT=0
 
 echo "⏳ Waiting for Kafka at $KAFKA_HOST to be ready..."
 
 # Extract host and port
-IFS=':' read -r HOST PORT <<< "$KAFKA_HOST"
+KAFKA_HOST_CLEAN="${KAFKA_HOST#*://}"
+IFS=':' read -r HOST PORT <<< "$KAFKA_HOST_CLEAN"
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT + 1))
     
     # Try to connect to Kafka
-    if nc -z "$HOST" "$PORT" 2>/dev/null; then
+    if nc -z -w 2 "$HOST" "$PORT" >/dev/null 2>&1; then
         echo "✅ Kafka is accepting connections at $KAFKA_HOST"
         echo "✅ Starting application..."
         
@@ -62,7 +63,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
         fi
     fi
     
-    echo "   Attempt $ATTEMPT/$MAX_ATTEMPTS: Kafka not ready yet, waiting 2 seconds..."
+    echo "   Attempt $ATTEMPT/$MAX_ATTEMPTS: Kafka cannot reach $HOST:$PORT"
     sleep 2
 done
 
