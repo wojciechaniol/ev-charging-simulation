@@ -296,7 +296,26 @@ Invoke-WebRequest -Uri "http://$($env:CENTRAL_HOST):8000/health"
 
 ---
 
-#### Adım 2.3: Charging Point Servislerini Başlat
+#### Adım 2.3: Network Oluşturma (ÖNEMLİ!)
+
+**İlk önce Docker network'ü oluşturun:**
+```powershell
+# Makine 2'de (CP bilgisayarında)
+# Network'ün var olup olmadığını kontrol et
+docker network ls | Select-String "evcharging-network"
+
+# Eğer yoksa oluştur (Makine 1'deki ile aynı isimde olmalı)
+docker network create ev-charging-simulation-1_evcharging-network
+
+# Network'ü doğrula
+docker network inspect ev-charging-simulation-1_evcharging-network
+```
+
+**⚠️ ÖNEMLİ:** Bu network Makine 1'de otomatik oluşur ama Makine 2 ve 3'te manuel oluşturulmalı!
+
+---
+
+#### Adım 2.4: Charging Point Servislerini Başlat
 
 **PowerShell Script ile (ÖNERİLİR):**
 ```powershell
@@ -306,6 +325,10 @@ Invoke-WebRequest -Uri "http://$($env:CENTRAL_HOST):8000/health"
 
 **Manuel PowerShell:**
 ```powershell
+# Environment variables'ların ayarlandığından emin olun
+Write-Host "KAFKA_BOOTSTRAP: $env:KAFKA_BOOTSTRAP"
+Write-Host "CENTRAL_HOST: $env:CENTRAL_HOST"
+
 # 5 CP Engine ve 5 Monitor servisini başlat (toplamda 10 servis)
 docker compose -f docker/docker-compose.remote-kafka.yml up -d `
   ev-cp-e-001 ev-cp-e-002 ev-cp-e-003 ev-cp-e-004 ev-cp-e-005 `
@@ -663,24 +686,132 @@ Test-NetConnection -ComputerName 192.168.1.105 -Port 9092
 
 ### Problem: "CP Dashboard'da görünmüyor"
 
-**Sebep:** CP Engine başlamadı veya Central'a bağlanamadı
+> **📚 Detaylı troubleshooting için:** [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)  
+> Bu guide tüm yaygın problemleri, sebeplerini ve çözümlerini içerir.
+
+**Belirtiler:**
+- Makine 2'de CP container'ları çalışıyor (`docker ps` ile görünüyor)
+- Ama Makine 1'de Central dashboard'da CP listesi boş
+
+**Hızlı Kontrol - Yeni deploy scriptleri otomatik diagnose yapar:**
+
+```powershell
+# Güncellenmiş script ile deploy et
+.\deploy-lab-cp.ps1
+
+# Script şunları otomatik kontrol eder:
+# ✅ Docker network var mı?
+# ✅ CP Monitor kayıt başarılı mı?
+# ✅ Central'a erişilebiliyor mu?
+# ❌ Problemler varsa diagnostic komutlar gösterir
+```
+
+**Manuel Troubleshooting:**
+
+**Sebep 1: Network Connectivity**
 
 **Çözüm (Makine 2'de) - Windows PowerShell:**
 ```powershell
-# CP Engine loglarını kontrol et
-docker logs ev-cp-e-001 -n 50
+# ADIM 1: Environment variables kontrol
+Write-Host "KAFKA_BOOTSTRAP: $env:KAFKA_BOOTSTRAP"
+Write-Host "CENTRAL_HOST: $env:CENTRAL_HOST"
+Write-Host "CENTRAL_PORT: $env:CENTRAL_PORT"
 
-# CP Monitor loglarını kontrol et
-docker logs ev-cp-m-001 -n 50
+# Eğer boşsa tekrar ayarla (Makine 1'in IP'si)
+$env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"      # ⬅️ DEĞİŞTİR
+$env:CENTRAL_HOST = "192.168.1.105"              # ⬅️ DEĞİŞTİR
+$env:CENTRAL_PORT = "8000"
 
-# CP'yi yeniden başlat
-docker restart ev-cp-e-001 ev-cp-m-001
+# ADIM 2: Network bağlantısını test et
+Test-NetConnection -ComputerName $env:CENTRAL_HOST -Port 8000
+# Beklenen: TcpTestSucceeded : True
 
-# 10 saniye bekle
+# ADIM 3: Central'a HTTP request gönder
+Invoke-WebRequest -Uri "http://$($env:CENTRAL_HOST):8000/health" -UseBasicParsing
+
+# ADIM 4: CP Monitor loglarını kontrol et
+docker logs ev-cp-m-001 --tail 30
+
+# Aranacak mesajlar:
+# ✅ "CP CP-001 registered with Central successfully"
+# ✅ "Central heartbeat sent successfully"
+# ❌ "Failed to register" veya "Connection refused" → Problem var!
+```
+
+**Sebep 2: Firewall Engelleme**
+
+**Çözüm (Makine 1'de) - PowerShell (Yönetici):**
+```powershell
+# Port 8000 için inbound rule ekle
+New-NetFirewallRule -DisplayName "EV Charging - Central HTTP 8000" `
+    -Direction Inbound `
+    -LocalPort 8000 `
+    -Protocol TCP `
+    -Action Allow
+
+# Kuralın eklendiğini doğrula
+Get-NetFirewallRule -DisplayName "EV Charging - Central HTTP 8000"
+
+# Test: Makine 2'den Makine 1'e erişim
+# Makine 2'de çalıştır:
+Invoke-WebRequest -Uri "http://192.168.1.105:8000/health"
+```
+
+**Sebep 3: Container'lar Yanlış Environment Variables Kullanıyor**
+
+**Çözüm (Makine 2'de):**
+```powershell
+# Container'ların environment variables'larını kontrol et
+docker inspect ev-cp-m-001 | Select-String "CP_MONITOR_CENTRAL_HOST|CENTRAL_HOST"
+
+# Yanlış IP görürseniz container'ları yeniden başlatın
+docker compose -f docker/docker-compose.remote-kafka.yml down
+docker compose -f docker/docker-compose.remote-kafka.yml up -d ev-cp-e-001 ev-cp-m-001
+
+# 10 saniye bekleyin
 Start-Sleep -Seconds 10
 
-# Dashboard'dan tekrar kontrol et (Makine 1 IP'sini kullan)
-Invoke-WebRequest -Uri "http://192.168.1.105:8000/cp" | ConvertFrom-Json | Select-Object -ExpandProperty charging_points | Where-Object { $_.cp_id -eq "CP-001" }
+# Monitor loglarını kontrol edin
+docker logs ev-cp-m-001 --tail 20
+```
+
+**Sebep 4: Docker Network Problemi**
+
+**Çözüm (Makine 2'de):**
+```powershell
+# Network'ün mevcut olduğunu kontrol et
+docker network ls | Select-String "evcharging"
+
+# Eğer network yoksa oluştur
+docker network create ev-charging-simulation-1_evcharging-network
+
+# Container'ları network'e bağla
+docker network connect ev-charging-simulation-1_evcharging-network ev-cp-e-001
+docker network connect ev-charging-simulation-1_evcharging-network ev-cp-m-001
+
+# Container'ları restart et
+docker restart ev-cp-e-001 ev-cp-m-001
+```
+
+**HIZLI TEST (Makine 2'de):**
+```powershell
+# CP Monitor'ün Central'a ulaşabildiğini container içinden test et
+docker exec ev-cp-m-001 curl -v http://$env:CENTRAL_HOST:8000/health
+
+# Başarılı olursa göreceksiniz:
+# < HTTP/1.1 200 OK
+# {"status":"healthy",...}
+```
+
+**Son Kontrol (Makine 1'de):**
+```powershell
+# Dashboard'dan CP'leri kontrol et
+Invoke-WebRequest -Uri "http://localhost:8000/cp" | ConvertFrom-Json | 
+    Select-Object -ExpandProperty charging_points | 
+    Format-Table cp_id, state, engine_state, monitor_status
+
+# Eğer hala boşsa, Central loglarını kontrol et:
+docker logs ev-central --tail 50 | Select-String "CP-001|registered|heartbeat"
 ```
 
 ---

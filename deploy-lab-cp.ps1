@@ -75,6 +75,18 @@ if ($centralTest.TcpTestSucceeded) {
 }
 Write-Host ""
 
+# Create network if not exists
+Write-Host "🌐 Checking Docker network..." -ForegroundColor Cyan
+$networkExists = docker network ls | Select-String "ev-charging-simulation-1_evcharging-network"
+if (-not $networkExists) {
+    Write-Host "   Network doesn't exist, creating..." -ForegroundColor Yellow
+    docker network create ev-charging-simulation-1_evcharging-network
+    Write-Host "   ✅ Network created" -ForegroundColor Green
+} else {
+    Write-Host "   ✅ Network already exists" -ForegroundColor Green
+}
+Write-Host ""
+
 # Start CP services
 Write-Host "1️⃣  Starting 5 Charging Point Engines and 5 Monitors (10 services)..." -ForegroundColor Cyan
 docker compose -f docker/docker-compose.remote-kafka.yml up -d `
@@ -94,16 +106,59 @@ Write-Host "   Total CP services running: $cpCount" -ForegroundColor Green
 Write-Host ""
 
 # Verify logs
-Write-Host "3️⃣  Verifying connections (sample from CP-001 and CP-003)..." -ForegroundColor Cyan
+Write-Host "3️⃣  Checking CP Monitor Registration..." -ForegroundColor Cyan
+Write-Host "   Inspecting logs for registration status..." -ForegroundColor Gray
 Write-Host ""
-Write-Host "   📋 CP-001 Engine logs:" -ForegroundColor Yellow
-docker logs ev-cp-e-001 2>&1 | Select-String "Kafka|ACTIVATED|started successfully" | Select-Object -Last 3
+
+$registrationSuccess = 0
+$registrationFailed = 0
+
+for ($i = 1; $i -le 5; $i++) {
+    $cpNum = "{0:D3}" -f $i
+    $containerName = "ev-cp-m-$cpNum"
+    
+    Write-Host "   📊 CP-$cpNum Monitor:" -ForegroundColor White
+    $logs = docker logs --tail 10 $containerName 2>&1
+    
+    if ($logs -match "registered with Central successfully") {
+        Write-Host "      ✅ Registration SUCCESSFUL" -ForegroundColor Green
+        $registrationSuccess++
+    } elseif ($logs -match "Failed to register") {
+        Write-Host "      ❌ Registration FAILED" -ForegroundColor Red
+        Write-Host "      Last 5 log lines:" -ForegroundColor Yellow
+        docker logs --tail 5 $containerName 2>&1 | ForEach-Object { Write-Host "         $_" -ForegroundColor Gray }
+        $registrationFailed++
+    } else {
+        Write-Host "      ⚠️  Registration status unclear" -ForegroundColor Yellow
+        Write-Host "      Last 3 log lines:" -ForegroundColor Gray
+        docker logs --tail 3 $containerName 2>&1 | ForEach-Object { Write-Host "         $_" -ForegroundColor Gray }
+    }
+}
+
 Write-Host ""
-Write-Host "   📋 CP-001 Monitor logs:" -ForegroundColor Yellow
-docker logs ev-cp-m-001 2>&1 | Select-String "Monitoring|heartbeat|Health check" | Select-Object -Last 3
+Write-Host "   📈 Registration Summary: $registrationSuccess successful, $registrationFailed failed" -ForegroundColor $(if ($registrationSuccess -eq 5) { "Green" } elseif ($registrationSuccess -gt 0) { "Yellow" } else { "Red" })
 Write-Host ""
-Write-Host "   📋 CP-003 Engine logs:" -ForegroundColor Yellow
-docker logs ev-cp-e-003 2>&1 | Select-String "Kafka|ACTIVATED|started successfully" | Select-Object -Last 3
+
+if ($registrationFailed -gt 0 -or $registrationSuccess -lt 5) {
+    Write-Host "⚠️  REGISTRATION ISSUES DETECTED!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "   Diagnostic commands to run:" -ForegroundColor Yellow
+    Write-Host "   1. Check environment variables:" -ForegroundColor White
+    Write-Host "      docker inspect ev-cp-m-001 | Select-String CENTRAL" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   2. Test Central HTTP from container:" -ForegroundColor White
+    Write-Host "      docker exec ev-cp-m-001 wget -O- http://${CENTRAL_HOST}:${CENTRAL_PORT}/health" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   3. Check firewall on Machine 1 ($CENTRAL_HOST):" -ForegroundColor White
+    Write-Host "      Port 8000 must allow inbound connections" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   4. Verify Central is accessible from this machine:" -ForegroundColor White
+    Write-Host "      Invoke-WebRequest -Uri http://${CENTRAL_HOST}:${CENTRAL_PORT}/health -UseBasicParsing" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   5. Check Central's /cp endpoint for registered CPs:" -ForegroundColor White
+    Write-Host "      Invoke-WebRequest -Uri http://${CENTRAL_HOST}:${CENTRAL_PORT}/cp -UseBasicParsing" -ForegroundColor Gray
+    Write-Host ""
+}
 Write-Host ""
 
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -124,6 +179,10 @@ Write-Host ""
 Write-Host "🔍 Monitor logs:" -ForegroundColor Cyan
 Write-Host "   docker logs -f ev-cp-e-001"
 Write-Host "   docker logs -f ev-cp-m-001"
+Write-Host ""
+Write-Host "✅ Verify CPs in Central Dashboard:" -ForegroundColor Green
+Write-Host "   http://${CENTRAL_HOST}:${CENTRAL_PORT}"
+Write-Host "   Or use API: Invoke-WebRequest -Uri http://${CENTRAL_HOST}:${CENTRAL_PORT}/cp -UseBasicParsing"
 Write-Host ""
 Write-Host "🛑 To stop all services:" -ForegroundColor Red
 Write-Host "   docker compose -f docker/docker-compose.remote-kafka.yml down"

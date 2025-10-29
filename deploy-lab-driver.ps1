@@ -67,6 +67,18 @@ try {
 }
 Write-Host ""
 
+# Create network if not exists
+Write-Host "🌐 Checking Docker network..." -ForegroundColor Cyan
+$networkExists = docker network ls | Select-String "ev-charging-simulation-1_evcharging-network"
+if (-not $networkExists) {
+    Write-Host "   Network doesn't exist, creating..." -ForegroundColor Yellow
+    docker network create ev-charging-simulation-1_evcharging-network
+    Write-Host "   ✅ Network created" -ForegroundColor Green
+} else {
+    Write-Host "   ✅ Network already exists" -ForegroundColor Green
+}
+Write-Host ""
+
 # Start Driver services
 Write-Host "1️⃣  Starting 5 Driver Services (Alice, Bob, Charlie, David, Eve)..." -ForegroundColor Cyan
 docker compose -f docker/docker-compose.remote-kafka.yml up -d `
@@ -85,13 +97,56 @@ Write-Host "   Total Driver services running: $driverCount" -ForegroundColor Gre
 Write-Host ""
 
 # Verify logs
-Write-Host "3️⃣  Verifying connections (sample from Alice and Bob)..." -ForegroundColor Cyan
+Write-Host "3️⃣  Verifying Driver startup and Kafka connections..." -ForegroundColor Cyan
 Write-Host ""
-Write-Host "   📋 Driver Alice logs:" -ForegroundColor Yellow
-docker logs ev-driver-alice 2>&1 | Select-String "Starting|Kafka|started successfully|requested charging" | Select-Object -Last 5
+
+$driversStarted = 0
+$driversWithIssues = 0
+$drivers = @("alice", "bob", "charlie", "david", "eve")
+
+foreach ($driver in $drivers) {
+    $containerName = "ev-driver-$driver"
+    Write-Host "   � Driver ${driver}:" -ForegroundColor White
+    
+    $logs = docker logs --tail 15 $containerName 2>&1
+    
+    if ($logs -match "started successfully|Starting driver") {
+        Write-Host "      ✅ Started successfully" -ForegroundColor Green
+        $driversStarted++
+        
+        # Check if driver has requested charging
+        if ($logs -match "requested charging") {
+            Write-Host "      🔋 Already requesting charging sessions" -ForegroundColor Cyan
+        }
+    } else {
+        Write-Host "      ⚠️  Startup status unclear" -ForegroundColor Yellow
+        Write-Host "      Last 3 log lines:" -ForegroundColor Gray
+        docker logs --tail 3 $containerName 2>&1 | ForEach-Object { Write-Host "         $_" -ForegroundColor Gray }
+        $driversWithIssues++
+    }
+}
+
 Write-Host ""
-Write-Host "   📋 Driver Bob logs:" -ForegroundColor Yellow
-docker logs ev-driver-bob 2>&1 | Select-String "Starting|Kafka|started successfully|requested charging" | Select-Object -Last 5
+Write-Host "   � Summary: $driversStarted started, $driversWithIssues with issues" -ForegroundColor $(if ($driversStarted -eq 5) { "Green" } elseif ($driversStarted -gt 0) { "Yellow" } else { "Red" })
+Write-Host ""
+
+if ($driversWithIssues -gt 0) {
+    Write-Host "⚠️  DRIVER STARTUP ISSUES DETECTED!" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "   Diagnostic commands to run:" -ForegroundColor Yellow
+    Write-Host "   1. Check environment variables:" -ForegroundColor White
+    Write-Host "      docker inspect ev-driver-alice | Select-String KAFKA" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   2. Check if CPs are available in Central:" -ForegroundColor White
+    Write-Host "      Invoke-WebRequest -Uri `"$env:CENTRAL_HTTP_URL/cp`" -UseBasicParsing" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   3. Test Kafka from container:" -ForegroundColor White
+    Write-Host "      docker exec ev-driver-alice ping -c 2 $kafkaHost" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   4. Check full logs:" -ForegroundColor White
+    Write-Host "      docker logs ev-driver-alice" -ForegroundColor Gray
+    Write-Host ""
+}
 Write-Host ""
 
 Write-Host "==========================================" -ForegroundColor Cyan

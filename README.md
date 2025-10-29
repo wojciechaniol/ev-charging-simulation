@@ -34,6 +34,7 @@ That's it! The entire system will:
 - **[QUICKSTART.md](QUICKSTART.md)** - Fast local setup for single computer (Windows/macOS/Linux)
 - **[LAB_DEPLOYMENT_SUMMARY.md](LAB_DEPLOYMENT_SUMMARY.md)** - Complete guide for 3 Windows lab computers
 - **[WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md)** - 🪟 **Windows PowerShell scripts and 3-window lab guide**
+- **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)** - 🔧 **Complete troubleshooting guide for multi-machine deployments**
 - **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - Comprehensive deployment options
 - **[CRASH_RESILIENCE.md](CRASH_RESILIENCE.md)** - Crash simulation and fault tolerance testing
 - **[DYNAMIC_DEPLOYMENT.md](DYNAMIC_DEPLOYMENT.md)** - Dynamic CP/Driver addition at runtime
