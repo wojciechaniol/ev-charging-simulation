@@ -648,8 +648,8 @@ Write-Host "CENTRAL_HOST: $env:CENTRAL_HOST"
 
 # 5 CP Engine ve 5 Monitor servisini başlat (toplamda 10 servis)
 docker compose -f docker/docker-compose.remote-kafka.yml up -d `
-  ev-cp-e-001 ev-cp-e-002 ev-cp-e-003 ev-cp-e-004 ev-cp-e-005 `
-  ev-cp-m-001 ev-cp-m-002 ev-cp-m-003 ev-cp-m-004 ev-cp-m-005
+  ev-cp-e-1 ev-cp-e-2 ev-cp-e-3 ev-cp-e-4 ev-cp-e-5 `
+  ev-cp-m-1 ev-cp-m-2 ev-cp-m-3 ev-cp-m-4 ev-cp-m-5
 
 # Servislerin durumunu kontrol et (10 servis görmelisiniz)
 docker compose -f docker/docker-compose.remote-kafka.yml ps
