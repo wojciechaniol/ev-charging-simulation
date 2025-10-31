@@ -824,6 +824,20 @@ cd C:\Users\$env:USERNAME\Desktop\ev-charging-simulation
 # Deploy script'ini çalıştırın
 .\deploy-lab-driver.ps1
 ```
+```powershell
+# run this first to create a recipe for the image
+docker build -t ev-driver:latest -f docker/Dockerfile.driver ..
+
+# creates an actual image. It is necessary to replace NAME and NEXT_PORT with actual values
+docker run -d --name ev-driver-NAME `
+  --network evcharging-network `
+  -e DRIVER_DRIVER_ID=driver-NAME `
+  -e DRIVER_KAFKA_BOOTSTRAP=$env:KAFKA_BOOTSTRAP `
+  -e DRIVER_CENTRAL_HTTP_URL=$env:CENTRAL_HTTP_URL `
+  -p NEXT_PORT:NEXT_PORT `
+  ev-driver:latest
+
+```
 
 **Script ne yapar:**
 - ✅ Environment variables'ları kontrol eder
