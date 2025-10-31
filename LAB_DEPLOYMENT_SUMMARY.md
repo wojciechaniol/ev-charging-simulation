@@ -657,6 +657,40 @@ docker compose -f docker/docker-compose.remote-kafka.yml ps
 # Tüm CP'lerin çalıştığını doğrula
 docker ps --filter "name=ev-cp" --format "table {{.Names}}\t{{.Status}}"
 ```
+Way to add monitor and engine manually
+```powershell
+# recipe for monitor and engine - run only once
+docker build -t ev-cp-engine:latest -f docker/Dockerfile.cp_e ..
+docker build -t ev-cp-monitor:latest -f docker/Dockerfile.cp_m ..
+
+Here it is necessary 
+docker run -d `
+  --name ev-cp-e-NUMBER `
+  --network evcharging-network `
+  -e CP_ENGINE_KAFKA_BOOTSTRAP="$env:KAFKA_BOOTSTRAP" `
+  -e CP_ENGINE_CP_ID="CP-NUMBER" `
+  -e CP_ENGINE_HEALTH_PORT=NEXT_PORT `
+  -e CP_ENGINE_LOG_LEVEL=INFO `
+  -e CP_ENGINE_KW_RATE=VALUE1 `
+  -e CP_ENGINE_EURO_RATE=VALUE2 `
+  -e CP_ENGINE_TELEMETRY_INTERVAL=1.0 `
+  -p NEXT_PORT:NEXT_PORT `
+  ev-cp-engine:latest
+
+docker run -d `
+  --name ev-cp-m-NUMBER `
+  --network evcharging-network `
+  -e CP_MONITOR_CP_ID="CP-NUMBER" `
+  -e CP_MONITOR_CP_E_HOST="ev-cp-e-NUMBER" `
+  -e CP_MONITOR_CP_E_PORT=NEXT_PORT `
+  -e CP_MONITOR_CENTRAL_HOST="$env:CENTRAL_HOST" `
+  -e CP_MONITOR_CENTRAL_PORT="$env:CENTRAL_PORT" `
+  -e CP_MONITOR_HEALTH_INTERVAL=2.0 `
+  -e CP_MONITOR_LOG_LEVEL=INFO `
+  -e CP_MONITOR_KAFKA_BOOTSTRAP="$env:KAFKA_BOOTSTRAP" `
+  ev-cp-monitor:latest
+
+```
 
 **Beklenen Çıktı:** 10 container (5 engine + 5 monitor) "Up" durumda olmalı
 
