@@ -178,10 +178,15 @@ class EVCentralController:
         cp.circuit_breaker.call_failed()  # Record failure in circuit breaker
         cp.record_monitor_heartbeat()
         
+        # Update engine state to reflect fault condition
+        cp.state = CPState.FAULT
+        cp.engine_status_known = False  # Engine status unknown until it recovers
+        cp.last_update = utc_now()
+        
         # Record fault event in database
         self.db.record_fault_event(cp_id, "FAULT", reason)
         logger.warning(
-            f"CP {cp_id} marked as FAULTY: {reason} "
+            f"CP {cp_id} marked as FAULTY: {reason} - Engine state set to FAULT "
             f"(Circuit: {cp.circuit_breaker.get_state().value})"
         )
         
@@ -205,7 +210,7 @@ class EVCentralController:
             logger.warning(f"CP {cp_id} has active session with {cp.current_driver}, notifying driver")
             # Driver will be notified through normal status updates
     
-    def clear_cp_fault(self, cp_id: str):
+    async def clear_cp_fault(self, cp_id: str):
         """Clear fault status from a charging point."""
         if cp_id in self.charging_points:
             cp = self.charging_points[cp_id]
@@ -215,11 +220,16 @@ class EVCentralController:
             cp.circuit_breaker.call_succeeded()  # Record success in circuit breaker
             cp.record_monitor_heartbeat()
             
+            # Reset engine state to ACTIVATED and clear engine status
+            cp.state = CPState.ACTIVATED
+            cp.engine_status_known = False  # Engine will send new status
+            cp.last_update = utc_now()
+            
             # Record recovery event in database
             self.db.record_fault_event(cp_id, "RECOVERY", "Health check restored")
             
             logger.info(
-                f"CP {cp_id} fault cleared, now available "
+                f"CP {cp_id} fault cleared, state set to ACTIVATED "
                 f"(Circuit: {cp.circuit_breaker.get_state().value})"
             )
         else:
@@ -475,9 +485,19 @@ class EVCentralController:
         for cp in self.charging_points.values():
             if not cp.monitor_last_seen:
                 cp.mark_monitor_down()
+                # If monitor is down, engine status is unknown
+                if cp.state != CPState.DISCONNECTED:
+                    cp.state = CPState.DISCONNECTED
+                    cp.engine_status_known = False
+                    cp.last_update = now
                 continue
             if now - cp.monitor_last_seen > self.monitor_timeout:
                 cp.mark_monitor_down()
+                # If monitor heartbeat timed out, engine status is unknown
+                if cp.state != CPState.DISCONNECTED:
+                    cp.state = CPState.DISCONNECTED
+                    cp.engine_status_known = False
+                    cp.last_update = now
 
 
 # Global controller instance for dashboard access
