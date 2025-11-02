@@ -1,83 +1,5 @@
 # 🎓 EV Charging Simulation - 3 Windows Bilgisayar Laboratuvar Dağıtım Kılavuzu
 
-Bu kılavuz, EV Charging Simulation sistemini laboratuvardaki **3 farklı Windows bilgisayara** (okul kablolu ağı üzerinden) nasıl dağıtacağınızı **adım adım** gösterir.
-
-> **💡 Not:** Tek bilgisayarda test etmek için **[QUICKSTART.md](QUICKSTART.md)** dosyasına bakın.  
-> Bu kılavuz sadece **lab ortamı (3 Windows bilgisayar)** için geçerlidir.
-
----
-
-## 🎯 Bu Kılavuzun Amacı
-
-**Senaryo:** Okul laboratuvarında 3 ayrı Windows bilgisayar var ve bu bilgisayarlar kablolu ağ (LAN) ile bağlı. Sistemi şu şekilde dağıtacağız:
-
-1. **Makine 1 (Öğretmen/Ana Bilgisayar)**: Kafka + Central Controller - Merkezi yönetim
-2. **Makine 2 (Lab PC 1)**: 5 Şarj İstasyonu (CP) - Şarj noktaları
-3. **Makine 3 (Lab PC 2)**: 5 Sürücü İstemcisi - Araç kullanıcıları
-
-**Ne Yapacağız:**
-- ✅ Her makinede Docker kurulumu
-- ✅ Proje dosyalarını her makineye kopyalama
-- ✅ Ağ bağlantılarını test etme
-- ✅ Firewall ayarlarını yapılandırma
-- ✅ Servisleri sırasıyla başlatma
-- ✅ Sistemin çalıştığını doğrulama
-
-**Toplam Süre:** ~45-60 dakika (ilk kurulum için)
-
----
-
-## 📅 Hızlı Başlangıç Zaman Çizelgesi
-
-Tüm ekip için tahmini zaman çizelgesi:
-
-```
-⏰ 0-20 dk:  [0️⃣ Ön Hazırlık]     Her 3 makinede Docker + Proje dosyaları
-⏰ 20-35 dk: [1️⃣ Makine 1]        Öğretmen: Kafka + Central başlatma
-⏰ 35-45 dk: [2️⃣ Makine 2]        Grup 1: 10 CP servisi başlatma
-⏰ 45-55 dk: [3️⃣ Makine 3]        Grup 2: 5 Driver servisi başlatma
-⏰ 55-60 dk: [4️⃣ Doğrulama]       Herkes: Test ve gözlem
-
-✅ Toplam: ~60 dakika (deneyimliyseniz 45 dakika)
-```
-
-### Paralel Çalışma İpucu 💡
-Zaman kazanmak için:
-- **0-20 dk:** Her 3 makine **aynı anda** Docker kurabilir
-- **20-35 dk:** Makine 1 hazırlanırken, Grup 1 ve 2 bekleyebilir veya bağlantı testleri yapabilir
-- **35-55 dk:** Makine 2 ve 3 **sırayla** başlatılmalı (Makine 3, Makine 2'ye bağımlı)
-
----
-
-## ✅ Ön Gereksinimler Kontrol Listesi
-
-Başlamadan önce aşağıdakilerin hazır olduğundan emin olun:
-
-### Donanım Gereksinimleri (Her Makine İçin):
-- [ ] Windows 10/11 (64-bit)
-- [ ] En az 8 GB RAM (16 GB önerilir)
-- [ ] En az 20 GB boş disk alanı
-- [ ] İnternet bağlantısı (ilk kurulum için)
-- [ ] Ethernet kablosu ile ağa bağlı
-
-### Yazılım Gereksinimleri (Her Makine İçin):
-- [ ] Docker Desktop for Windows kurulacak
-- [ ] PowerShell erişimi (Windows'ta varsayılan)
-- [ ] Git (opsiyonel ama önerilir)
-- [ ] Web tarayıcısı (Chrome/Edge/Firefox)
-
-### Ağ Gereksinimleri:
-- [ ] 3 bilgisayar aynı yerel ağda (LAN)
-- [ ] Her bilgisayarın sabit veya öngörülebilir IP adresi var
-- [ ] Bilgisayarlar arası ping yapılabiliyor
-- [ ] IT departmanından gerekli izinler alınmış (firewall kuralları için)
-
-### İdari Gereksinimler:
-- [ ] Yönetici (Administrator) erişimi var
-- [ ] Firewall ayarları değiştirilebilir
-- [ ] Port yönlendirme yapılabilir (9092, 8000, 9999)
-
----
 
 ## 📊 Sistem Yapısı
 
@@ -131,73 +53,6 @@ Başlamadan önce aşağıdakilerin hazır olduğundan emin olun:
 
 ---
 
-## 📋 Kurulum İş Akışı (Genel Bakış)
-
-Bu rehber 5 ana aşamadan oluşur:
-
-### Aşama 0️⃣: Ön Hazırlık (Tüm Makinelerde - ~20 dakika)
-```
-[Makine 1] → Docker kurulumu + Proje dosyaları
-[Makine 2] → Docker kurulumu + Proje dosyaları  
-[Makine 3] → Docker kurulumu + Proje dosyaları
-```
-**Hedef:** Her makineye Docker ve proje dosyalarını kurmak
-
-### Aşama 1️⃣: Makine 1 Kurulumu (Ana Sunucu - ~10 dakika)
-```
-IP Bul → Firewall Aç → Kafka Başlat → Central Başlat → IP Paylaş
-```
-**Hedef:** Kafka ve Central Controller'ı çalıştırıp IP adresini diğer makinelere vermek
-
-### Aşama 2️⃣: Makine 2 Kurulumu (Şarj İstasyonları - ~10 dakika)
-```
-IP Al → Bağlantı Test → Network Oluştur → 5 CP + 5 Monitor Başlat → Doğrula
-```
-**Hedef:** 10 CP servisi (5 engine + 5 monitor) başlatmak ve Central'a kayıt olmalarını sağlamak
-
-### Aşama 3️⃣: Makine 3 Kurulumu (Sürücüler - ~5 dakika)
-```
-IP Al → Bağlantı Test → 5 Driver Başlat → Dashboard Erişim → Doğrula
-```
-**Hedef:** 5 sürücü istemcisi başlatmak ve şarj istekleri göndermelerini sağlamak
-
-### Aşama 4️⃣: Doğrulama ve Test (~5 dakika)
-```
-Makine 1: CP'leri Dashboard'da Gör
-Makine 2: Log Kontrolü
-Makine 3: Şarj Sessionları Gözlemle
-```
-**Hedef:** Tüm sistemin birlikte çalıştığını doğrulamak
-
----
-
-## 🎓 Kimin Ne Yapacağı (Rol Dağılımı)
-
-### Öğretmen/Lab Sorumlusu:
-- ✅ Makine 1'i kurar ve yönetir (Kafka + Central)
-- ✅ IP adresini not edip öğrencilere dağıtır
-- ✅ Firewall kurallarını ayarlar (IT yardımı ile)
-- ✅ Dashboard'dan tüm sistemi izler
-
-### Öğrenci Grubu 1 (Makine 2):
-- ✅ Öğretmenden IP adresini alır
-- ✅ CP servislerini başlatır (script ile)
-- ✅ CP'lerin Central'a kayıt olduğunu doğrular
-
-### Öğrenci Grubu 2 (Makine 3):
-- ✅ Öğretmenden IP adresini alır
-- ✅ Driver servislerini başlatır (script ile)
-- ✅ Driver dashboard'larından şarj sessionlarını izler
-
----
-
-## � Ağ Gereksinimleri
-
-### Tüm 3 Bilgisayar İçin:
-1. ✅ Aynı yerel ağda (LAN) olmalı (örn: 192.168.1.x)
-2. ✅ Firewall izinleri gerekli portlar için açık olmalı
-3. ✅ Docker/Docker Desktop kurulu ve çalışıyor olmalı
-4. ✅ Terminal/PowerShell erişimi
 
 ### Gerekli Portlar:
 - **Makine 1**: 9092 (Kafka), 8000 (Dashboard), 9999 (TCP)
@@ -207,80 +62,6 @@ Makine 3: Şarj Sessionları Gözlemle
 ---
 
 ## 🚀 Kurulum Adımları
-
-### 0️⃣ Ön Hazırlık (Tüm Windows Bilgisayarlarda)
-
-> **⏱️ Tahmini Süre:** 15-20 dakika (her makine için)  
-> **👥 Kim Yapacak:** Öğretmen + Her iki öğrenci grubu kendi makinelerinde
-
-#### Adım 0.1: Docker Desktop Kurulumu
-
-**Tüm 3 makinede aşağıdaki adımları takip edin:**
-
-**1. Docker Desktop İndirme:**
-- Web tarayıcısında https://www.docker.com/products/docker-desktop/ adresine gidin
-- **"Download for Windows"** butonuna tıklayın
-- `Docker Desktop Installer.exe` dosyasını indirin (~500 MB)
-
-**2. Docker Desktop Kurulumu:**
-```powershell
-# İndirilen installer'ı çalıştırın (çift tıklama)
-# Kurulum sırasında:
-✅ "Use WSL 2 instead of Hyper-V" seçeneğini işaretleyin (önerilir)
-✅ "Add shortcut to desktop" seçeneğini işaretleyin
-❌ "Use Windows containers" seçeneğini işaretLEMEyin (Linux containers kullanacağız)
-```
-
-**3. Bilgisayarı Yeniden Başlatma:**
-- Kurulum tamamlandıktan sonra **bilgisayarı mutlaka yeniden başlatın**
-- Yeniden başladıktan sonra Docker Desktop otomatik başlayacak
-
-**4. Docker Desktop'ı Başlatma ve Yapılandırma:**
-- Masaüstünden "Docker Desktop" ikonuna çift tıklayın
-- İlk açılışta Docker hizmet sözleşmesini kabul edin
-- Sistem tray'de (sağ alt köşede) Docker balina ikonu görünmeli
-- İkon yeşil oldığında Docker hazır demektir
-
-**5. WSL 2 Kurulumu (Eğer İsterse):**
-```powershell
-# Eğer Docker "WSL 2 installation is incomplete" hatası verirse:
-# PowerShell'i Yönetici olarak açın ve şunu çalıştırın:
-
-wsl --install
-
-# Bilgisayarı tekrar başlatın
-```
-
-**6. Docker Kurulumunu Doğrulama:**
-
-**PowerShell'i açın** (Başlat → "PowerShell" yazın → Enter):
-```powershell
-# Docker versiyonunu kontrol et
-docker --version
-# Beklenen çıktı: Docker version 24.x.x, build xxxxx
-
-# Docker Compose versiyonunu kontrol et
-docker compose version
-# Beklenen çıktı: Docker Compose version v2.x.x
-
-# Docker'ın çalıştığını test et
-docker run hello-world
-# Beklenen: "Hello from Docker!" mesajı görülmeli
-```
-
-**✅ Başarılı Kurulum İşaretleri:**
-- Docker Desktop açık ve sistem tray'de yeşil ikon var
-- `docker --version` komutu versiyon numarası döndürüyor
-- `docker run hello-world` başarıyla çalışıyor
-
-**❌ Sorun Giderme:**
-- **"Docker Desktop starting..." takılı kalıyorsa:** 2-3 dakika bekleyin
-- **"WSL 2 hatası" alıyorsanız:** `wsl --install` komutunu çalıştırın ve restart edin
-- **"Access denied" hatası:** PowerShell'i "Run as Administrator" ile açın
-
----
-
-#### Adım 0.2: Proje Dosyalarını İndirme
 
 **Tüm 3 makinede aynı adımları takip edin:**
 
@@ -356,27 +137,11 @@ ls
 # Örnek: Makine 2'den Makine 1'e ping
 ping 192.168.1.101
 
-# Beklenen:
-# Reply from 192.168.1.101: bytes=32 time<1ms TTL=128
-# (4 başarılı paket)
-
-# Eğer "Request timed out" alırsanız:
-# - Windows Firewall ICMPv4 engelliyor olabilir
-# - Makineler farklı subnet'lerde olabilir
-# - IT departmanına danışın
-```
-
-**✅ Ağ Hazır İşaretleri:**
-- Her makine kendi IP adresini biliyor
-- Makineler arası ping başarılı
-- Tüm IP'ler aynı subnet'te (örn: 192.168.1.x)
 
 ---
 
 ### 1️⃣ Makine 1 Kurulumu (Ana Sunucu)
 
-> **⏱️ Tahmini Süre:** 10-15 dakika  
-> **👥 Kim Yapacak:** Öğretmen veya lab sorumlusu  
 > **🎯 Amaç:** Kafka ve Central Controller başlatmak, IP adresini diğer makinelere vermek
 
 #### Adım 1.1: IPv4 Adresini Bul
@@ -397,32 +162,8 @@ ipconfig | findstr /i "IPv4"
 192.168.1.105
 ```
 
-**⚠️ ÖNEMLİ:** 
-- Bu IP adresini **NOT EDİN** - diğer 2 makinede kullanacaksınız! 📝
-- Okul ağı 10.x.x.x kullanıyorsa ona göre not edin
-- Öğretmen/yönetici IP aralığını onaylasın
-
 ---
 
-#### Adım 1.2: docker-compose.yml Dosyasını Kontrol Et
-
-Projenizin ana dizininde `docker-compose.yml` dosyası zaten yapılandırılmış durumda:
-
-```yaml
-kafka:
-  image: apache/kafka:3.7.0
-  container_name: ev-kafka
-  ports:
-    - "9092:9092"
-  environment:
-    KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://${KAFKA_ADVERTISED_HOST:-localhost}:9092
-    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
-    # ... diğer ayarlar
-```
-
-**Not:** `KAFKA_ADVERTISED_HOST` environment variable ile dış IP kullanımı destekleniyor.
-
----
 
 #### Adım 1.3: Windows Firewall Yapılandırması
 
@@ -524,16 +265,10 @@ Write-Host "==================================="
 Write-Host "Bu IP'yi diğer 2 makineye verin!"
 ```
 
-**Bu bilgileri diğer 2 lab bilgisayarına gönderin! 📤**
-
-**İpucu:** IP'yi not kağıdına yazın veya WhatsApp/Teams'te paylaşın
-
 ---
 
 ### 2️⃣ Makine 2 Kurulumu (Charging Points)
 
-> **⏱️ Tahmini Süre:** 10-12 dakika  
-> **👥 Kim Yapacak:** Öğrenci Grubu 1  
 > **🎯 Amaç:** 5 CP Engine + 5 CP Monitor başlatmak (toplam 10 servis)  
 > **📋 Gerekli Bilgi:** Makine 1'in IP adresi (öğretmenden alınacak)
 
@@ -543,8 +278,6 @@ Write-Host "Bu IP'yi diğer 2 makineye verin!"
 ```
 Makine 1 IP: 192.168.1.105  (Örnek - kendi IP'nizi kullanın)
 ```
-
-**Bu IP'yi not edin - sonraki adımlarda kullanacaksınız!** 📝
 
 ---
 
@@ -738,17 +471,11 @@ Invoke-WebRequest -Uri "http://localhost:8000/cp" | ConvertFrom-Json | Select-Ob
 
 ### 3️⃣ Makine 3 Kurulumu (Drivers)
 
-> **⏱️ Tahmini Süre:** 8-10 dakika  
-> **👥 Kim Yapacak:** Öğrenci Grubu 2  
 > **🎯 Amaç:** 5 Driver istemcisi başlatmak (Alice, Bob, Charlie, David, Eve)  
 > **📋 Gerekli Bilgi:** Makine 1'in IP adresi + CP'lerin hazır olması (Makine 2'den)
 
 #### Adım 3.1: Makine 1'den IP Adresini Alma
 
-**Öğretmenden/Makine 1'den şu bilgileri alın:**
-```
-Makine 1 IP: 192.168.1.105  (Örnek - kendi IP'nizi kullanın)
-```
 
 **Makine 2'nin hazır olduğundan emin olun!**
 - Makine 2'de 10 CP servisi çalışıyor olmalı
@@ -963,78 +690,10 @@ Start-Process "http://localhost:8104"  # Eve
 
 ## 🎯 4️⃣ Son Doğrulama ve Test (Tüm Makineler)
 
-> **⏱️ Tahmini Süre:** 5-10 dakika  
-> **👥 Kim Yapacak:** Herkes birlikte (koordineli)  
-> **🎯 Amaç:** Tüm sistemin birlikte çalıştığını doğrulamak
-
-### Adım 4.1: Hızlı Sistem Özeti
-
-**Her makinede kontrol edin:**
-
-**Makine 1 (PowerShell):**
-```powershell
-Write-Host "📊 MAKİNE 1 DURUMU" -ForegroundColor Cyan
-Write-Host "==================" -ForegroundColor Cyan
-
-# Çalışan servisler
-docker ps --format "table {{.Names}}\t{{.Status}}" --filter "name=ev-"
-
-# Kayıtlı CP sayısı
-$cpCount = (Invoke-WebRequest -Uri "http://localhost:8000/cp" -UseBasicParsing | ConvertFrom-Json).charging_points.Count
-Write-Host "`n✅ Kayıtlı CP Sayısı: $cpCount/5" -ForegroundColor $(if ($cpCount -eq 5) {"Green"} else {"Yellow"})
-
-# Dashboard URL
-Write-Host "`n🌐 Dashboard: http://localhost:8000" -ForegroundColor Cyan
-```
-
-**Makine 2 (PowerShell):**
-```powershell
-Write-Host "📊 MAKİNE 2 DURUMU" -ForegroundColor Cyan
-Write-Host "==================" -ForegroundColor Cyan
-
-# Çalışan servisler
-$cpEngines = (docker ps --filter "name=ev-cp-e" --format "{{.Names}}").Count
-$cpMonitors = (docker ps --filter "name=ev-cp-m" --format "{{.Names}}").Count
-
-Write-Host "✅ CP Engines: $cpEngines/5" -ForegroundColor $(if ($cpEngines -eq 5) {"Green"} else {"Red"})
-Write-Host "✅ CP Monitors: $cpMonitors/5" -ForegroundColor $(if ($cpMonitors -eq 5) {"Green"} else {"Red"})
-
-# Kayıt durumu
-Write-Host "`n🔍 CP Monitor Kayıt Durumu:" -ForegroundColor Yellow
-for ($i = 1; $i -le 5; $i++) {
-    $cpNum = "{0:D3}" -f $i
-    $registered = docker logs ev-cp-m-$cpNum 2>&1 | Select-String "registered with Central successfully"
-    if ($registered) {
-        Write-Host "   CP-$cpNum: ✅ KAYITLI" -ForegroundColor Green
-    } else {
-        Write-Host "   CP-$cpNum: ❌ KAYIT YOK" -ForegroundColor Red
-    }
-}
-```
-
-**Makine 3 (PowerShell):**
-```powershell
-Write-Host "📊 MAKİNE 3 DURUMU" -ForegroundColor Cyan
-Write-Host "==================" -ForegroundColor Cyan
-
-# Çalışan servisler
-$driverCount = (docker ps --filter "name=ev-driver" --format "{{.Names}}").Count
-Write-Host "✅ Drivers: $driverCount/5" -ForegroundColor $(if ($driverCount -eq 5) {"Green"} else {"Red"})
-
-# Dashboard URL'leri
-Write-Host "`n🌐 Driver Dashboards:" -ForegroundColor Cyan
-Write-Host "   Alice:   http://localhost:8100"
-Write-Host "   Bob:     http://localhost:8101"
-Write-Host "   Charlie: http://localhost:8102"
-Write-Host "   David:   http://localhost:8103"
-Write-Host "   Eve:     http://localhost:8104"
-```
-
 ---
 
 ### Adım 4.2: Uçtan Uca Test Senaryosu
 
-**Bu testi tüm ekip birlikte yapın:**
 
 **1️⃣ Makine 1'de: Dashboard'u Açın**
 ```powershell
@@ -1167,71 +826,16 @@ docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 
 Aşağıdaki tüm maddeleri kontrol edin:
 
-### Makine 1 (Ana Sunucu):
-- [ ] Kafka container'ı "Up" durumda
-- [ ] Central container'ı "Up" durumda
-- [ ] Dashboard http://localhost:8000 erişilebilir
-- [ ] Dashboard'da 5 CP görünüyor
-- [ ] Her CP'nin state'i "ACTIVATED"
-- [ ] Active sessions bölümünde şarj sessionları var
-
-### Makine 2 (Charging Points):
-- [ ] 5 CP Engine container'ı "Up" durumda
-- [ ] 5 CP Monitor container'ı "Up" durumda
-- [ ] Her CP Monitor "registered successfully" log'u var
-- [ ] CP Engine loglarında telemetry mesajları akıyor
-- [ ] Environment variables doğru ayarlanmış
-
-### Makine 3 (Drivers):
-- [ ] 5 Driver container'ı "Up" durumda
-- [ ] Driver dashboard'ları erişilebilir (8100-8104)
-- [ ] Dashboard'larda charging sessions görünüyor
-- [ ] Driver loglarında "ACCEPTED", "IN_PROGRESS" mesajları var
-- [ ] Environment variables doğru ayarlanmış
-
-### Genel Sistem:
-- [ ] 3 makine arası network bağlantısı çalışıyor
-- [ ] Firewall kuralları doğru ayarlanmış
-- [ ] Log akışları tüm makinelerde eşzamanlı
-- [ ] CP crash ve recovery test edildi ve başarılı
-- [ ] Hiçbir container "Restarting" veya "Exited" durumda değil
-
----
-
-## 🎓 Başarı! Sisteminiz Hazır
-
-**Tebrikler! 🎉** 3 Windows bilgisayarında dağıtık EV Charging Simulation sisteminizi başarıyla kurdunuz!
-
-### Ne Yaptınız:
-✅ 3 makinede Docker kurulumu  
-✅ Network bağlantılarını yapılandırma  
-✅ Firewall kurallarını ayarlama  
-✅ 17 servis (2 + 10 + 5) başarıyla başlatma  
-✅ Uçtan uca sistemin çalıştığını doğrulama  
 
 ### Şimdi Ne Yapabilirsiniz:
 
-1. **İzleme ve Gözlem:**
-   - Makine 1: Central dashboard'dan tüm sistemi izleyin
-   - Makine 2: CP loglarını takip edin
-   - Makine 3: Driver dashboard'larından şarj sessionlarını gözlemleyin
-
+1
 2. **Test Senaryoları:**
    - CP crash simülasyonu (`docker stop ev-cp-e-XXX`)
    - Yeni CP ekleme (`.\add-cp.ps1 11 150.0 0.40`)
    - Yeni driver ekleme (`.\add-driver.ps1 frank 8105`)
 
-3. **Öğrenme:**
-   - Kafka mesajlarını inceleyin
-   - State machine transitions'ları gözlemleyin
-   - Circuit breaker pattern'ini test edin
-   - Fault tolerance mekanizmalarını keşfedin
 
-### Ek Kaynaklar:
-- **[TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)** - Sorun giderme
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Hızlı referans kartı
-- **[WINDOWS_DEPLOYMENT.md](WINDOWS_DEPLOYMENT.md)** - Windows PowerShell detayları
-- **[CRASH_RESILIENCE.md](CRASH_RESILIENCE.md)** - Fault tolerance testleri
 
 ---
 
@@ -1292,20 +896,6 @@ docker logs ev-driver-alice | Select-String "requested charging"
 @(8100, 8101, 8102, 8103, 8104) | ForEach-Object {
     Write-Host "`nPort $_:"
     (Invoke-WebRequest -Uri "http://localhost:$_/health" | ConvertFrom-Json).status
-}
-```
-
-# ✅ Kafka'ya bağlandılar mı?
-docker logs ev-driver-alice | Select-String "Kafka producer started"
-
-# ✅ Charging request gönderebildiler mi?
-docker logs ev-driver-alice | Select-String "requested charging"
-
-# ✅ Dashboard'lar erişilebilir mi?
-@(8100, 8101, 8102, 8103, 8104) | ForEach-Object {
-    $port = $_
-    Write-Host "Port ${port}:"
-    curl -s "http://localhost:${port}/health" | ConvertFrom-Json | Select-Object status
 }
 ```
 
@@ -1400,369 +990,3 @@ docker compose -f docker/docker-compose.remote-kafka.yml up -d --scale ev-driver
 
 ---
 
-## 🔧 Sorun Giderme
-
-### Problem: "Connection refused to Kafka"
-
-**Belirtiler:**
-```
-ERROR: Failed to connect to Kafka at 192.168.1.105:9092
-```
-
-**Çözüm (Makine 1'de) - Windows PowerShell:**
-```powershell
-# Firewall kuralını kontrol et
-Get-NetFirewallRule -DisplayName "Kafka Port 9092"
-
-# Eğer yoksa ekle
-New-NetFirewallRule -DisplayName "Kafka Port 9092" -Direction Inbound -LocalPort 9092 -Protocol TCP -Action Allow
-
-# Kafka'nın 0.0.0.0'da dinlediğini doğrula
-docker exec ev-kafka netstat -tuln | Select-String "9092"
-# Görmeli: 0.0.0.0:9092 (127.0.0.1:9092 DEĞİL!)
-
-# Network connectivity test et (Makine 2 veya 3'ten)
-Test-NetConnection -ComputerName 192.168.1.105 -Port 9092
-# Beklenen: TcpTestSucceeded : True
-```
-
----
-
-### Problem: "CP Dashboard'da görünmüyor"
-
-> **📚 Detaylı troubleshooting için:** [TROUBLESHOOTING_GUIDE.md](TROUBLESHOOTING_GUIDE.md)  
-> Bu guide tüm yaygın problemleri, sebeplerini ve çözümlerini içerir.
-
-**Belirtiler:**
-- Makine 2'de CP container'ları çalışıyor (`docker ps` ile görünüyor)
-- Ama Makine 1'de Central dashboard'da CP listesi boş
-
-**Hızlı Kontrol - Yeni deploy scriptleri otomatik diagnose yapar:**
-
-```powershell
-# Güncellenmiş script ile deploy et
-.\deploy-lab-cp.ps1
-
-# Script şunları otomatik kontrol eder:
-# ✅ Docker network var mı?
-# ✅ CP Monitor kayıt başarılı mı?
-# ✅ Central'a erişilebiliyor mu?
-# ❌ Problemler varsa diagnostic komutlar gösterir
-```
-
-**Manuel Troubleshooting:**
-
-**Sebep 1: Network Connectivity**
-
-**Çözüm (Makine 2'de) - Windows PowerShell:**
-```powershell
-# ADIM 1: Environment variables kontrol
-Write-Host "KAFKA_BOOTSTRAP: $env:KAFKA_BOOTSTRAP"
-Write-Host "CENTRAL_HOST: $env:CENTRAL_HOST"
-Write-Host "CENTRAL_PORT: $env:CENTRAL_PORT"
-
-# Eğer boşsa tekrar ayarla (Makine 1'in IP'si)
-$env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"      # ⬅️ DEĞİŞTİR
-$env:CENTRAL_HOST = "192.168.1.105"              # ⬅️ DEĞİŞTİR
-$env:CENTRAL_PORT = "8000"
-
-# ADIM 2: Network bağlantısını test et
-Test-NetConnection -ComputerName $env:CENTRAL_HOST -Port 8000
-# Beklenen: TcpTestSucceeded : True
-
-# ADIM 3: Central'a HTTP request gönder
-Invoke-WebRequest -Uri "http://$($env:CENTRAL_HOST):8000/health" -UseBasicParsing
-
-# ADIM 4: CP Monitor loglarını kontrol et
-docker logs ev-cp-m-001 --tail 30
-
-# Aranacak mesajlar:
-# ✅ "CP CP-001 registered with Central successfully"
-# ✅ "Central heartbeat sent successfully"
-# ❌ "Failed to register" veya "Connection refused" → Problem var!
-```
-
-**Sebep 2: Firewall Engelleme**
-
-**Çözüm (Makine 1'de) - PowerShell (Yönetici):**
-```powershell
-# Port 8000 için inbound rule ekle
-New-NetFirewallRule -DisplayName "EV Charging - Central HTTP 8000" `
-    -Direction Inbound `
-    -LocalPort 8000 `
-    -Protocol TCP `
-    -Action Allow
-
-# Kuralın eklendiğini doğrula
-Get-NetFirewallRule -DisplayName "EV Charging - Central HTTP 8000"
-
-# Test: Makine 2'den Makine 1'e erişim
-# Makine 2'de çalıştır:
-Invoke-WebRequest -Uri "http://192.168.1.105:8000/health"
-```
-
-**Sebep 3: Container'lar Yanlış Environment Variables Kullanıyor**
-
-**Çözüm (Makine 2'de):**
-```powershell
-# Container'ların environment variables'larını kontrol et
-docker inspect ev-cp-m-001 | Select-String "CP_MONITOR_CENTRAL_HOST|CENTRAL_HOST"
-
-# Yanlış IP görürseniz container'ları yeniden başlatın
-docker compose -f docker/docker-compose.remote-kafka.yml down
-docker compose -f docker/docker-compose.remote-kafka.yml up -d ev-cp-e-001 ev-cp-m-001
-
-# 10 saniye bekleyin
-Start-Sleep -Seconds 10
-
-# Monitor loglarını kontrol edin
-docker logs ev-cp-m-001 --tail 20
-```
-
-**Sebep 4: Docker Network Problemi**
-
-**Çözüm (Makine 2'de):**
-```powershell
-# Network'ün mevcut olduğunu kontrol et
-docker network ls | Select-String "evcharging"
-
-# Eğer network yoksa oluştur
-docker network create ev-charging-simulation-1_evcharging-network
-
-# Container'ları network'e bağla
-docker network connect ev-charging-simulation-1_evcharging-network ev-cp-e-001
-docker network connect ev-charging-simulation-1_evcharging-network ev-cp-m-001
-
-# Container'ları restart et
-docker restart ev-cp-e-001 ev-cp-m-001
-```
-
-**HIZLI TEST (Makine 2'de):**
-```powershell
-# CP Monitor'ün Central'a ulaşabildiğini container içinden test et
-docker exec ev-cp-m-001 curl -v http://$env:CENTRAL_HOST:8000/health
-
-# Başarılı olursa göreceksiniz:
-# < HTTP/1.1 200 OK
-# {"status":"healthy",...}
-```
-
-**Son Kontrol (Makine 1'de):**
-```powershell
-# Dashboard'dan CP'leri kontrol et
-Invoke-WebRequest -Uri "http://localhost:8000/cp" | ConvertFrom-Json | 
-    Select-Object -ExpandProperty charging_points | 
-    Format-Table cp_id, state, engine_state, monitor_status
-
-# Eğer hala boşsa, Central loglarını kontrol et:
-docker logs ev-central --tail 50 | Select-String "CP-001|registered|heartbeat"
-```
-
----
-
-### Problem: "Driver şarj isteği gönderemiyor"
-
-**Çözüm (Makine 3'te) - Windows PowerShell:**
-```powershell
-# Central'a erişebiliyor mu?
-Invoke-WebRequest -Uri "$env:CENTRAL_HTTP_URL/health"
-
-# CP'lerin ACTIVATED durumda olduğunu doğrula
-Invoke-WebRequest -Uri "$env:CENTRAL_HTTP_URL/cp" | ConvertFrom-Json | Select-Object -ExpandProperty charging_points | Where-Object {$_.engine_state -ne "ACTIVATED"}
-
-# Driver loglarını kontrol et
-docker logs ev-driver-alice -n 50
-
-# Yeniden başlat
-docker restart ev-driver-alice
-
-# Manuel şarj isteği gönder
-Invoke-WebRequest -Uri "http://localhost:8100/drivers/driver-alice/requests" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body '{"cp_id": "CP-001", "vehicle_id": "VEH-001"}'
-```
-
----
-
-### Problem: "IP Adresi Değişti"
-
-**Windows'ta IP sabitlemek için:**
-1. `Control Panel` → `Network and Sharing Center`
-2. `Change adapter settings`
-3. Ethernet'e sağ tık → `Properties`
-4. `Internet Protocol Version 4 (TCP/IPv4)` → `Properties`
-5. `Use the following IP address:` seç
-6. IP: `192.168.1.105` (veya istediğiniz IP)
-7. Subnet: `255.255.255.0`
-8. Gateway: `192.168.1.1` (router IP'si)
-9. DNS: `8.8.8.8` ve `8.8.4.4` (Google DNS)
-
-**Not:** Okul ağında IP değişikliği yapmak için sistem yöneticisine danışın!
-
----
-
-## 📊 Performans Metrikleri
-
-### Beklenen Değerler:
-- **Kafka throughput**: 1000+ messages/sec
-- **CP response time**: < 100ms
-- **Monitor health check**: 2 saniyede bir
-- **Driver request interval**: 4.5 - 8 saniye arası
-- **Session başlatma süresi**: < 2 saniye
-- **Telemetry publish rate**: 1 saniyede bir
-
----
-
-## 🎓 Eğitmen İçin Notlar
-
-### Sunum Öncesi Kontrol:
-1. ✅ Her 3 makinede Docker Desktop çalışıyor
-2. ✅ Network bağlantısı stabil
-3. ✅ IP adresleri doğru ayarlanmış
-4. ✅ Firewall kuralları uygulanmış
-5. ✅ Test scriptleri çalıştırılmış
-
-### Sunum Sırasında Gösterilecekler:
-1. **Otonom Başlatma** (5 dk)
-   - Makine 1 → 2 → 3 sırasıyla başlat
-   - Terminal loglarını göster
-   - Dashboard'u projeksiyonda aç
-
-2. **Normal İşleyiş** (5 dk)
-   - Dashboard'da CP durumları
-   - Session'lar ve telemetri
-   - Driver dashboard'ları
-
-3. **Fault Injection** (5 dk)
-   - CP-003'ü crash et
-   - FAULTY durumuna geçişi göster
-   - Recover işlemi
-   - ACTIVATED'a geri dönüş
-
-4. **Eşzamanlı Test** (5 dk)
-   - 5 driver + 5 CP aynı anda
-   - Log akışlarını göster
-   - Dashboard'da real-time updates
-
-### Öğrenci Çalışması İçin:
-- Öğrenciler kendi laptop'larında **tek makine** deployment yapabilir
-- `docker compose up -d` ile tüm sistem local'de çalışır
-- 3 makine senaryosu laboratuvar ortamı için özel
-- **Detaylar için:** [QUICKSTART.md](QUICKSTART.md) dosyasına bakın
-
----
-
-## 📝 Sık Kullanılan Komutlar
-
-**Windows PowerShell:**
-```powershell
-# Tüm logları izle
-docker compose logs -f
-
-# Belirli servisleri izle (ayrı terminal pencereleri önerilir)
-docker logs -f ev-cp-e-001
-docker logs -f ev-driver-alice
-
-# Servis sayısını kontrol et
-(docker ps --format "{{.Names}}").Count
-
-# Kafka topic'lerini listele (sadece Makine 1'de)
-docker exec kafka kafka-topics.sh --bootstrap-server localhost:9092 --list
-
-# Tüm servisleri durdur
-docker compose down
-
-# Tüm servisleri temizle (volumes dahil)
-docker compose down -v
-docker system prune -a --volumes -f
-```
-
----
-
-## 🎯 Hızlı Başlatma Özeti
-
-### Makine 1 (Ana Sunucu) - Windows PowerShell:
-```powershell
-$env:KAFKA_ADVERTISED_HOST = "192.168.1.105"  # ⬅️ KENDİ IP'NİZ
-docker compose up -d kafka
-Start-Sleep -Seconds 30
-docker compose up -d ev-central
-```
-
-### Makine 2 (Charging Points) - Windows PowerShell:
-```powershell
-$env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"
-$env:CENTRAL_HOST = "192.168.1.105"
-$env:CENTRAL_PORT = "8000"
-
-# Script ile (önerilir - otomatik bağlantı testi dahil)
-.\deploy-lab-cp.ps1
-
-# VEYA manuel docker compose komutları
-docker compose -f docker/docker-compose.remote-kafka.yml up -d `
-  ev-cp-e-001 ev-cp-e-002 ev-cp-e-003 ev-cp-e-004 ev-cp-e-005 `
-  ev-cp-m-001 ev-cp-m-002 ev-cp-m-003 ev-cp-m-004 ev-cp-m-005
-```
-
-### Makine 3 (Drivers) - Windows PowerShell:
-```powershell
-$env:KAFKA_BOOTSTRAP = "192.168.1.105:9092"
-$env:CENTRAL_HTTP_URL = "http://192.168.1.105:8000"
-
-# Script ile (önerilir - otomatik bağlantı testi dahil)
-.\deploy-lab-driver.ps1
-
-# VEYA manuel docker compose komutları
-docker compose -f docker/docker-compose.remote-kafka.yml up -d `
-  ev-driver-alice ev-driver-bob ev-driver-charlie ev-driver-david ev-driver-eve
-```
-
----
-
-## 📌 Windows Lab Ortamı Notları
-
-### Deployment Scripts:
-Lab ortamı için özel PowerShell script'leri hazırlandı:
-- **deploy-lab-cp.ps1**: Makine 2'de 5 CP + 5 Monitor başlatır (otomatik bağlantı testi dahil)
-- **deploy-lab-driver.ps1**: Makine 3'te 5 Driver başlatır (otomatik bağlantı testi dahil)
-
-Bu script'ler:
-- ✅ Environment variable kontrolü yapar
-- ✅ Kafka ve Central'a bağlantıyı test eder
-- ✅ Firewall problemlerini erken tespit eder
-- ✅ Detaylı log çıktıları verir
-
-### Windows Defender Firewall:
-Lab ortamında Windows Defender Firewall özellikle aşağıdaki portları engelleyebilir:
-- **9092** (Kafka)
-- **8000** (Central Dashboard)
-- **9999** (Central TCP Server)
-
-**Çözüm:** Gerekli portlar için inbound rules eklenmeli (yukarıda detaylandırılmıştır).
-
-### PowerShell 7+ Önerilir:
-- Daha iyi performans ve cross-platform uyumluluk
-- `Invoke-WebRequest` komutları daha güvenilir
-- JSON parsing `ConvertFrom-Json` ile kolay
-
-### Docker Desktop WSL 2:
-- WSL 2 backend mutlaka kullanılmalı (Settings → General → Use WSL 2)
-- Daha performanslı ve Windows için optimize edilmiş
-
-### Okul Ağı (Wired LAN):
-- Tüm lab bilgisayarları kablolu ethernet ile okul ağına bağlı
-- DHCP kullanılıyorsa IP adreslerinin değişme ihtimaline karşı dikkatli olun
-- Statik IP ataması için sistem yöneticisine danışın
-- Bazı okul ağlarında firewall/proxy ayarları Docker trafiğini etkileyebilir
-
----
-
-**Güncellenme:** 28 Ekim 2025  
-**Versiyon:** 4.0 (Windows Lab Environment Only)  
-**Toplam Servis:** 17 (2 infra + 10 CP + 5 driver)  
-**Kaynak:** [GitHub - ev-charging-simulation](https://github.com/Bariskosee/ev-charging-simulation)
-
----
-
-**🚀 Başarılar! Windows lab ortamınızda sistem artık 3 makine üzerinde kesintisiz çalışmaya hazır!**
